@@ -1,0 +1,9 @@
+# Force npm install instead of npm ci (works even if package-lock.json is out of sync)
+[phases.install]
+cmds = ["npm install --no-audit --no-fund"]
+
+[phases.build]
+cmds = ["echo 'Build phase: no build step required for backend'"]
+
+[start]
+cmd = "node server.js"
