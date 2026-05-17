@@ -1,0 +1,50 @@
+═══════════════════════════════════════════════════════════
+   RAILWAY ENVIRONMENT VARIABLES — COPY PASTE READY
+═══════════════════════════════════════════════════════════
+
+Variable 1:
+───────────
+Name:  PORT
+Value: 4000
+
+
+Variable 2:
+───────────
+Name:  JWT_SECRET
+Value: 234de2ebb98bf8b253c5916edd386c077fe24667606509f0b69530b155b61d25eadf72598c34399c4a99cf9ddb14c96e
+
+
+Variable 3:
+───────────
+Name:  MONGO_URI
+Value: mongodb+srv://rishtaadmin:RishtaConnect2026@rishtaconnect.uz7lejv.mongodb.net/rishtaconnect?retryWrites=true&w=majority&appName=RishtaConnect
+
+
+═══════════════════════════════════════════════════════════
+   RAILWAY SERVICE SETTINGS
+═══════════════════════════════════════════════════════════
+
+Root Directory:  backend
+Start Command:   node server.js
+Build Command:   (leave empty - auto-detect)
+
+
+═══════════════════════════════════════════════════════════
+   QUICK CREDENTIALS REFERENCE
+═══════════════════════════════════════════════════════════
+
+MongoDB Atlas:
+  Cluster:   RishtaConnect (cluster ID: uz7lejv)
+  Username:  rishtaadmin
+  Password:  RishtaConnect2026
+  Database:  rishtaconnect
+
+App Admin Login (after seeding):
+  Email:     admin@rishta.com
+  Password:  admin1234
+
+Demo User Login:
+  Email:     zeeshan@demo.com
+  Password:  demo1234
+
+═══════════════════════════════════════════════════════════
