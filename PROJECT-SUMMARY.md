@@ -307,6 +307,16 @@ On startup, if `users` collection is empty:
 
 ---
 
+## 🐛 Known Backend Bugs Fixed (Latest)
+
+| Bug | Fix | Status |
+|-----|-----|--------|
+| ActivityLog crash on insert (UUID vs ObjectId mismatch) | `SimpleSchema` now uses String `_id` | ✅ Fixed |
+| X-Forwarded-For warning from rate-limiter | `app.set("trust proxy", 1)` | ✅ Fixed |
+| Insert error crashing server | Try/catch with error logging | ✅ Fixed |
+| Build fails on `npm ci` | `nixpacks.toml` forces `npm install` | ✅ Fixed |
+| Blank env var crash | Railway Raw Editor — keep only 4 essential vars | ⚠️ User to do |
+
 ## 🐛 Common Issues & Fixes
 
 | Symptom | Fix |

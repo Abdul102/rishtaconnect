@@ -29,10 +29,13 @@ const PORT = process.env.PORT || 4000;
 const JWT_SECRET = process.env.JWT_SECRET || "rishta-dev-secret-change-in-prod";
 const MONGO_URI = process.env.MONGO_URI || "";
 
+// Trust Railway/Vercel proxy (fixes X-Forwarded-For warning in rate limiter)
+app.set("trust proxy", 1);
+
 app.use(helmet({ contentSecurityPolicy: false }));
 app.use(cors({ origin: "*" }));
 app.use(express.json({ limit: "10mb" }));
-app.use(rateLimit({ windowMs: 60 * 1000, max: 300 }));
+app.use(rateLimit({ windowMs: 60 * 1000, max: 300, standardHeaders: true, legacyHeaders: false }));
 
 /* ==================== DATABASE LAYER ==================== */
 // Mode: MongoDB if MONGO_URI is set, else JSON file
@@ -102,7 +105,11 @@ const MessageSchema = new mongoose.Schema({
   from: String, to: String, text: String, time: { type: Date, default: Date.now }
 }, { _id: false });
 
-const SimpleSchema = (name) => new mongoose.Schema({}, { strict: false, collection: name });
+// Use String _id (uuid) for all "simple" collections, matching the rest of the app
+const SimpleSchema = (name) => new mongoose.Schema(
+  { _id: { type: String, default: () => uuid() } },
+  { strict: false, collection: name }
+);
 
 let M = {};
 function buildModels() {
@@ -145,16 +152,23 @@ const db = {
     return (data[col] || []).find(item => Object.entries(filter).every(([k, v]) => item[k] === v));
   },
   async insert(col, doc) {
-    if (USE_MONGO && mongoReady) {
-      const created = await mongoModelFor(col).create(doc);
-      return created.toObject ? created.toObject() : created;
+    try {
+      if (USE_MONGO && mongoReady) {
+        if (!doc._id) doc._id = uuid();
+        const created = await mongoModelFor(col).create(doc);
+        return created.toObject ? created.toObject() : created;
+      }
+      const data = loadJSONDB();
+      data[col] = data[col] || [];
+      if (!doc._id && !doc.id) doc._id = uuid();
+      data[col].push(doc);
+      saveJSONDB(data);
+      return doc;
+    } catch (e) {
+      console.error(`✗ db.insert(${col}) failed:`, e.message);
+      // Don't crash the server — return doc so the request can complete
+      return doc;
     }
-    const data = loadJSONDB();
-    data[col] = data[col] || [];
-    if (!doc._id && !doc.id) doc._id = uuid();
-    data[col].push(doc);
-    saveJSONDB(data);
-    return doc;
   },
   async update(col, filter, patch) {
     if (USE_MONGO && mongoReady) return mongoModelFor(col).updateOne(filter, { $set: patch });
