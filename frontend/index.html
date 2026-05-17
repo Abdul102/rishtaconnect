@@ -1,0 +1,3532 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>RishtaConnect — Trusted Muslim Matrimonial Platform</title>
+<meta name="description" content="RishtaConnect — A trusted, verified, AI-powered Muslim marriage bureau for Pakistan and overseas families." />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Noto+Nastaliq+Urdu:wght@400;700&family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet" />
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+<script src="config.js"></script>
+<style>
+  :root {
+    --emerald: #0f766e;
+    --emerald-dark: #134e4a;
+    --emerald-light: #14b8a6;
+    --gold: #c8a25b;
+    --gold-light: #e7c98a;
+    --cream: #fbf7f0;
+    --rose: #be185d;
+    --ink: #1f2937;
+  }
+  html, body { font-family: 'Inter', sans-serif; background: var(--cream); color: var(--ink); }
+  .font-urdu { font-family: 'Noto Nastaliq Urdu', serif; line-height: 2; }
+  .font-display { font-family: 'Playfair Display', serif; }
+  .bg-cream { background: var(--cream); }
+  .bg-emerald-brand { background: var(--emerald); }
+  .text-emerald-brand { color: var(--emerald); }
+  .border-emerald-brand { border-color: var(--emerald); }
+  .bg-gold { background: var(--gold); }
+  .text-gold { color: var(--gold); }
+  .gradient-hero {
+    background: linear-gradient(135deg, #0f766e 0%, #134e4a 50%, #0c4a6e 100%);
+  }
+  .gradient-card {
+    background: linear-gradient(135deg, #fbf7f0 0%, #ffffff 100%);
+  }
+  .gradient-gold {
+    background: linear-gradient(135deg, #c8a25b 0%, #e7c98a 100%);
+  }
+  .shadow-soft { box-shadow: 0 10px 40px -10px rgba(15, 118, 110, 0.15); }
+  .shadow-card { box-shadow: 0 4px 20px -4px rgba(0,0,0,0.08); }
+  .glass {
+    background: rgba(255,255,255,0.7);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+  }
+  .pattern-bg {
+    background-image:
+      radial-gradient(circle at 20% 20%, rgba(200,162,91,0.08) 0, transparent 40%),
+      radial-gradient(circle at 80% 80%, rgba(15,118,110,0.08) 0, transparent 40%);
+  }
+  .fade-in { animation: fadeIn .4s ease both; }
+  @keyframes fadeIn { from{opacity:0; transform: translateY(8px);} to{opacity:1; transform:none;} }
+  .badge-verified {
+    background: linear-gradient(135deg,#0f766e,#14b8a6);
+    color:#fff;
+  }
+  .badge-vip {
+    background: linear-gradient(135deg,#c8a25b,#e7c98a);
+    color:#1f2937;
+  }
+  .scrollbar-hide::-webkit-scrollbar { display:none; }
+  .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+  .compat-ring { transform: rotate(-90deg); }
+  .blur-photo { filter: blur(14px); }
+  .nav-active { color: #0f766e; background: rgba(15,118,110,0.08); }
+  input:focus, select:focus, textarea:focus { outline: 2px solid #14b8a6; outline-offset: 1px; }
+  .btn-primary {
+    background: linear-gradient(135deg,#0f766e,#0d9488);
+    color: white;
+    transition: all .2s ease;
+  }
+  .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 8px 20px -8px rgba(15,118,110,0.5); }
+  .btn-gold {
+    background: linear-gradient(135deg,#c8a25b,#b8924b);
+    color: white;
+    transition: all .2s ease;
+  }
+  .btn-gold:hover { transform: translateY(-1px); box-shadow: 0 8px 20px -8px rgba(200,162,91,0.5); }
+  .chip { display:inline-flex; align-items:center; gap:4px; padding:2px 10px; border-radius:999px; font-size:11px; font-weight:600;}
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel" data-presets="env,react">
+const { useState, useEffect, useMemo, useRef, createContext, useContext } = React;
+
+/* ---------------- i18n ---------------- */
+const STRINGS = {
+  en: {
+    appName: "RishtaConnect",
+    tagline: "Trusted Muslim Matrimony • AI-Powered • Family Friendly",
+    getStarted: "Get Started",
+    login: "Login",
+    signup: "Sign Up",
+    home: "Home",
+    search: "Search",
+    matches: "Matches",
+    chat: "Chat",
+    profile: "Profile",
+    verify: "Verify",
+    subscription: "Premium",
+    admin: "Admin",
+    notifications: "Notifications",
+    trustScore: "Trust Score",
+    compatibility: "Compatibility",
+    verified: "Verified",
+    overseas: "Overseas",
+    sendInterest: "Send Interest",
+    message: "Message",
+    viewProfile: "View Profile",
+    filters: "Filters",
+    age: "Age",
+    city: "City",
+    country: "Country",
+    profession: "Profession",
+    income: "Income",
+    sect: "Sect",
+    maritalStatus: "Marital Status",
+    height: "Height",
+    verifiedOnly: "Verified Only",
+    name: "Full Name",
+    email: "Email",
+    phone: "Phone",
+    password: "Password",
+    dob: "Date of Birth",
+    gender: "Gender",
+    male: "Male",
+    female: "Female",
+    submit: "Submit",
+    cancel: "Cancel",
+    save: "Save",
+    next: "Next",
+    back: "Back",
+  },
+  ur: {
+    appName: "رشتہ کنیکٹ",
+    tagline: "قابلِ اعتماد مسلم میرج بیورو • اے آئی پاور • فیملی فرینڈلی",
+    getStarted: "شروع کریں",
+    login: "لاگ ان",
+    signup: "اکاؤنٹ بنائیں",
+    home: "ہوم",
+    search: "تلاش",
+    matches: "میچز",
+    chat: "چیٹ",
+    profile: "پروفائل",
+    verify: "تصدیق",
+    subscription: "پریمیم",
+    admin: "ایڈمن",
+    notifications: "اطلاعات",
+    trustScore: "اعتماد سکور",
+    compatibility: "مطابقت",
+    verified: "تصدیق شدہ",
+    overseas: "بیرونِ ملک",
+    sendInterest: "پیغامِ دلچسپی",
+    message: "پیغام",
+    viewProfile: "پروفائل دیکھیں",
+    filters: "فلٹرز",
+    age: "عمر",
+    city: "شہر",
+    country: "ملک",
+    profession: "پیشہ",
+    income: "آمدنی",
+    sect: "مسلک",
+    maritalStatus: "ازدواجی حیثیت",
+    height: "قد",
+    verifiedOnly: "صرف تصدیق شدہ",
+    name: "پورا نام",
+    email: "ای میل",
+    phone: "فون نمبر",
+    password: "پاس ورڈ",
+    dob: "تاریخِ پیدائش",
+    gender: "جنس",
+    male: "مرد",
+    female: "عورت",
+    submit: "جمع کریں",
+    cancel: "منسوخ",
+    save: "محفوظ کریں",
+    next: "آگے",
+    back: "واپس",
+  }
+};
+
+const I18nCtx = createContext({ lang: "en", t:(k)=>k, setLang:()=>{} });
+const useI18n = () => useContext(I18nCtx);
+
+/* ---------------- API Client ---------------- */
+// Auto-detects backend: localhost in dev, set window.API_URL for production.
+const API_BASE = (typeof window !== "undefined" && window.API_URL) ||
+                  (location.hostname === "localhost" ? "http://localhost:4000" : "");
+async function api(path, opts={}) {
+  if (!API_BASE) return null; // offline mode — frontend uses localStorage only
+  try {
+    const token = localStorage.getItem("rishta_token");
+    const r = await fetch(API_BASE + path, {
+      ...opts,
+      headers: {
+        "Content-Type":"application/json",
+        ...(token ? { Authorization: "Bearer " + token } : {}),
+        ...(opts.headers||{})
+      },
+      body: opts.body ? JSON.stringify(opts.body) : undefined
+    });
+    if (!r.ok) {
+      const text = await r.text();
+      throw new Error(text || r.statusText);
+    }
+    return r.json();
+  } catch(e) {
+    console.warn("API offline:", e.message);
+    return null;
+  }
+}
+
+/* ---------------- Demo Data ---------------- */
+const SEED_USERS = [
+  {
+    id: "u1", role:"male", name:"Zeeshan Ahmed", nameUr:"ذیشان احمد",
+    age:29, gender:"Male", height:"5'10\"", maritalStatus:"Never Married",
+    city:"Lahore", country:"Pakistan", nationality:"Pakistani",
+    religion:"Islam", sect:"Sunni", languages:["Urdu","Punjabi","English"],
+    qualification:"BBA", university:"LUMS",
+    profession:"Business Owner", company:"Ahmed Honda Showroom",
+    business:"Honda Bikes Showroom (3 outlets)",
+    income:"PKR 5,00,000/month", jobType:"Self-Employed", overseas:false,
+    fatherProfession:"Retired Banker", motherProfession:"Homemaker",
+    siblings:"2 brothers, 1 sister (all married)",
+    familyType:"Moderate Religious", ownHouse:true,
+    familyBackground:"Respected business family from Lahore.",
+    namaz:"Regular (5 times)", religiousLevel:"Practising",
+    nature:"Respectful, family-oriented, calm",
+    hobbies:["Cricket","Reading","Traveling"], lifestyle:"Balanced",
+    smoking:"No", futureGoals:"Settle abroad eventually, expand business",
+    preferences:{ ageRange:"22-28", city:"Any in Pakistan", education:"Graduate+", religious:"Practising", familyType:"Moderate" },
+    photos:["male"], blurPhoto:false, trustScore:92,
+    verifications:{ phone:true,email:true,cnic:true,face:true,family:true,business:true },
+    timeline:"Within 1 year", lastActive:"2 hours ago",
+    bio:"Alhamdulillah, business owner from Lahore. Looking for a kind, educated and family-oriented life partner."
+  },
+  {
+    id:"u2", role:"female", name:"Areeba Fatima", nameUr:"عریبہ فاطمہ",
+    age:24, gender:"Female", height:"5'4\"", maritalStatus:"Never Married",
+    city:"Islamabad", country:"Pakistan", nationality:"Pakistani",
+    religion:"Islam", sect:"Sunni", languages:["Urdu","English"],
+    qualification:"BS Computer Science", university:"NUST",
+    profession:"School Teacher", company:"Roots International",
+    business:"-", income:"PKR 80,000/month", jobType:"Full-Time", overseas:false,
+    fatherProfession:"Govt Officer (Grade 19)", motherProfession:"Homemaker",
+    siblings:"1 elder sister (married), 1 younger brother",
+    familyType:"Religious", ownHouse:true,
+    familyBackground:"Educated, religious family from Islamabad.",
+    namaz:"Regular (5 times)", hijab:"Yes", religiousLevel:"Practising",
+    nature:"Soft-spoken, caring, family-loving",
+    hobbies:["Reading","Cooking","Calligraphy"], lifestyle:"Simple",
+    smoking:"No", futureGoals:"Build a peaceful Islamic home",
+    preferences:{ ageRange:"26-32", city:"Islamabad/Lahore/Overseas", education:"Graduate+", religious:"Practising", familyType:"Religious" },
+    photos:["female"], blurPhoto:true, trustScore:88,
+    verifications:{ phone:true,email:true,cnic:true,face:true,family:true,business:false },
+    timeline:"Within 1 year", lastActive:"5 hours ago",
+    bio:"Teacher and CS graduate. Looking for a practising Muslim with good akhlaaq and respectful family."
+  },
+  {
+    id:"u3", role:"male", name:"Hamza Khan", nameUr:"حمزہ خان",
+    age:31, gender:"Male", height:"5'11\"", maritalStatus:"Never Married",
+    city:"Dubai", country:"UAE", nationality:"Pakistani (Overseas)",
+    religion:"Islam", sect:"Sunni", languages:["Urdu","English","Arabic"],
+    qualification:"MS Software Engineering", university:"FAST + UK",
+    profession:"Senior Software Engineer", company:"Emirates NBD",
+    business:"-", income:"AED 28,000/month (~PKR 21 Lac)", jobType:"Full-Time", overseas:true,
+    fatherProfession:"Retired Army Officer", motherProfession:"Homemaker",
+    siblings:"1 brother (UK), 1 sister (married)",
+    familyType:"Moderate", ownHouse:true,
+    familyBackground:"Settled family in Karachi, son in Dubai.",
+    namaz:"Regular", religiousLevel:"Practising",
+    nature:"Calm, responsible, ambitious",
+    hobbies:["Tech","Fitness","Travel"], lifestyle:"Active",
+    smoking:"No", futureGoals:"Settle in Dubai with family",
+    preferences:{ ageRange:"24-29", city:"Pakistan or Overseas", education:"Graduate+", religious:"Practising", familyType:"Moderate/Religious" },
+    photos:["male"], blurPhoto:false, trustScore:90,
+    verifications:{ phone:true,email:true,cnic:true,face:true,family:true,business:false },
+    timeline:"Ready now", lastActive:"30 min ago",
+    bio:"Overseas Pakistani in Dubai. Looking for a kind, educated partner ready to relocate."
+  },
+  {
+    id:"u4", role:"female", name:"Mahnoor Tariq", nameUr:"ماہ نور طارق",
+    age:26, gender:"Female", height:"5'5\"", maritalStatus:"Never Married",
+    city:"Karachi", country:"Pakistan", nationality:"Pakistani",
+    religion:"Islam", sect:"Sunni", languages:["Urdu","English"],
+    qualification:"MBBS", university:"Aga Khan University",
+    profession:"Doctor (House Officer)", company:"AKU Hospital",
+    business:"-", income:"PKR 1,20,000/month", jobType:"Full-Time", overseas:false,
+    fatherProfession:"Businessman", motherProfession:"Doctor",
+    siblings:"1 elder brother (USA)",
+    familyType:"Moderate Religious", ownHouse:true,
+    familyBackground:"Well-known doctor-business family in Karachi.",
+    namaz:"Mostly regular", hijab:"Modest dress", religiousLevel:"Moderate",
+    nature:"Confident, caring, ambitious",
+    hobbies:["Medicine","Reading","Travel"], lifestyle:"Professional",
+    smoking:"No", futureGoals:"Specialize in pediatrics",
+    preferences:{ ageRange:"27-33", city:"Karachi/Overseas", education:"Doctor/Engineer/MBA", religious:"Moderate-Practising", familyType:"Educated" },
+    photos:["female"], blurPhoto:true, trustScore:94,
+    verifications:{ phone:true,email:true,cnic:true,face:true,family:true,business:false },
+    timeline:"Within 1 year", lastActive:"1 hour ago",
+    bio:"Doctor from Karachi. Looking for a respectful, supportive and educated partner."
+  },
+  {
+    id:"u5", role:"male", name:"Bilal Sheikh", nameUr:"بلال شیخ",
+    age:34, gender:"Male", height:"6'0\"", maritalStatus:"Divorced (no kids)",
+    city:"Toronto", country:"Canada", nationality:"Canadian-Pakistani",
+    religion:"Islam", sect:"Sunni", languages:["Urdu","English"],
+    qualification:"MBA", university:"University of Toronto",
+    profession:"Finance Manager", company:"RBC Bank",
+    business:"-", income:"CAD 11,000/month (~PKR 22 Lac)", jobType:"Full-Time", overseas:true,
+    fatherProfession:"Retired Engineer", motherProfession:"Homemaker",
+    siblings:"2 sisters (married)",
+    familyType:"Moderate", ownHouse:true,
+    familyBackground:"Settled Canadian-Pakistani family.",
+    namaz:"Jumma + Eid", religiousLevel:"Moderate",
+    nature:"Friendly, mature, family-loving",
+    hobbies:["Travel","Cars","Cooking"], lifestyle:"Modern",
+    smoking:"No", futureGoals:"Build a stable family in Canada",
+    preferences:{ ageRange:"26-32", city:"Pakistan/Canada", education:"Graduate+", religious:"Moderate", familyType:"Open-minded" },
+    photos:["male"], blurPhoto:false, trustScore:85,
+    verifications:{ phone:true,email:true,cnic:false,face:true,family:true,business:false },
+    timeline:"Ready now", lastActive:"Today",
+    bio:"Canadian-Pakistani professional. Previously married briefly, no children. Looking for a serious second chance."
+  },
+  {
+    id:"u6", role:"female", name:"Sana Iqbal", nameUr:"ثناء اقبال",
+    age:23, gender:"Female", height:"5'3\"", maritalStatus:"Never Married",
+    city:"Lahore", country:"Pakistan", nationality:"Pakistani",
+    religion:"Islam", sect:"Sunni", languages:["Urdu","Punjabi","English"],
+    qualification:"BS English Literature", university:"Punjab University",
+    profession:"Content Writer", company:"Freelance",
+    business:"-", income:"PKR 60,000/month", jobType:"Freelance", overseas:false,
+    fatherProfession:"Shopkeeper", motherProfession:"Homemaker",
+    siblings:"3 (she is eldest)",
+    familyType:"Religious", ownHouse:false,
+    familyBackground:"Simple religious family from Lahore.",
+    namaz:"Regular", hijab:"Yes", religiousLevel:"Practising",
+    nature:"Humble, hardworking, soft-natured",
+    hobbies:["Writing","Quran","Gardening"], lifestyle:"Simple",
+    smoking:"No", futureGoals:"Be a supportive wife and mother",
+    preferences:{ ageRange:"24-30", city:"Lahore/Faisalabad", education:"Graduate+", religious:"Practising", familyType:"Religious" },
+    photos:["female"], blurPhoto:true, trustScore:80,
+    verifications:{ phone:true,email:true,cnic:true,face:false,family:true,business:false },
+    timeline:"Just exploring", lastActive:"Yesterday",
+    bio:"Simple religious girl from Lahore. Looking for a practising and kind partner."
+  }
+];
+
+const SEED_MESSAGES = {
+  "u1-u2": [
+    { from:"u1", text:"Assalamu Alaikum, hope you and your family are well.", time:"10:24 AM" },
+    { from:"u2", text:"Walaikum Assalam, alhamdulillah. JazakAllah for your interest.", time:"10:30 AM" },
+    { from:"u1", text:"Would your family be open to a formal meeting in sha Allah?", time:"10:32 AM" }
+  ]
+};
+
+/* ---------------- Helpers ---------------- */
+const cities = ["Lahore","Karachi","Islamabad","Rawalpindi","Faisalabad","Multan","Peshawar","Quetta","Dubai","Riyadh","London","Manchester","Toronto","New York","Houston"];
+const countries = ["Pakistan","UAE","Saudi Arabia","UK","USA","Canada"];
+const sects = ["Sunni","Shia","Other","Prefer not to say"];
+const educations = ["Matric","Intermediate","Bachelors","Masters","MPhil/PhD","MBBS","Engineering","CA/ACCA"];
+const professions = ["Doctor","Engineer","Teacher","Business","Govt Employee","Software Engineer","Finance","Banker","Designer","Other"];
+const incomeRanges = ["Below 50k","50k-1 Lac","1-3 Lac","3-5 Lac","5-10 Lac","10 Lac+"];
+const maritalStatuses = ["Never Married","Divorced","Widowed"];
+
+function uid(){ return "u"+Math.random().toString(36).slice(2,9); }
+function compatibility(a,b){
+  if(!a || !b) return 0;
+  let s = 50;
+  if(a.sect === b.sect) s += 10;
+  if(a.country === b.country) s += 8;
+  if(a.city === b.city) s += 6;
+  if(a.religiousLevel === b.religiousLevel) s += 8;
+  if(a.familyType === b.familyType) s += 6;
+  const langOverlap = (a.languages||[]).filter(x=>(b.languages||[]).includes(x)).length;
+  s += Math.min(langOverlap*3, 9);
+  s = Math.min(99, Math.max(40, s + Math.floor((b.trustScore||80)/20)));
+  return s;
+}
+
+/* ---------------- Avatars (SVG, no external) ---------------- */
+function Avatar({kind="male", blur=false, size=80}) {
+  const bg = kind==="male" ? "#0f766e" : "#be185d";
+  return (
+    <div className={"relative rounded-full overflow-hidden flex items-center justify-center text-white font-bold "+(blur?"blur-photo":"")}
+      style={{width:size, height:size, background:`linear-gradient(135deg,${bg},#134e4a)`}}>
+      <svg width={size*0.55} height={size*0.55} viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="12" cy="8" r="4"/>
+        <path d="M4 20c2-4 6-5 8-5s6 1 8 5"/>
+      </svg>
+    </div>
+  );
+}
+
+/* ---------------- Notification Sound (Web Audio) ---------------- */
+function playChime(){
+  try {
+    const ctx = new (window.AudioContext||window.webkitAudioContext)();
+    const o = ctx.createOscillator();
+    const g = ctx.createGain();
+    o.connect(g); g.connect(ctx.destination);
+    o.type="sine"; o.frequency.value=880;
+    g.gain.setValueAtTime(0.0001, ctx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.2, ctx.currentTime+0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime+0.4);
+    o.start();
+    o.frequency.exponentialRampToValueAtTime(1320, ctx.currentTime+0.15);
+    o.stop(ctx.currentTime+0.45);
+  } catch(e) {}
+}
+
+/* ---------------- Top Bar ---------------- */
+function TopBar({user, onNav, lang, setLang, view, unreadMsgs, unreadNotifs}){
+  const { t } = useI18n();
+  return (
+    <div className="sticky top-0 z-30 glass border-b border-gray-200">
+      <div className="max-w-6xl mx-auto px-4 h-14 flex items-center justify-between">
+        <button className="flex items-center gap-2" onClick={()=>onNav("home")}>
+          <div className="w-9 h-9 rounded-xl gradient-hero flex items-center justify-center text-white font-bold">R</div>
+          <div className="leading-tight">
+            <div className="font-display text-lg text-emerald-brand">RishtaConnect</div>
+            <div className="text-[10px] text-gray-500 -mt-0.5">{t("tagline")}</div>
+          </div>
+        </button>
+        <div className="flex items-center gap-2">
+          {user && (
+            <>
+              <button onClick={()=>onNav("chat")} className="relative w-10 h-10 rounded-lg hover:bg-gray-100 flex items-center justify-center" title="Messages">
+                <span className="text-xl">💬</span>
+                {unreadMsgs>0 && (
+                  <span className="absolute top-0.5 right-0.5 min-w-[18px] h-[18px] px-1 rounded-full bg-red-600 text-white text-[10px] font-bold flex items-center justify-center animate-pulse">{unreadMsgs>9?"9+":unreadMsgs}</span>
+                )}
+              </button>
+              <button onClick={()=>onNav("notifications")} className="relative w-10 h-10 rounded-lg hover:bg-gray-100 flex items-center justify-center" title="Notifications">
+                <span className="text-xl">🔔</span>
+                {unreadNotifs>0 && (
+                  <span className="absolute top-0.5 right-0.5 min-w-[18px] h-[18px] px-1 rounded-full bg-red-600 text-white text-[10px] font-bold flex items-center justify-center animate-pulse">{unreadNotifs>9?"9+":unreadNotifs}</span>
+                )}
+              </button>
+            </>
+          )}
+          <button onClick={()=>setLang(lang==="en"?"ur":"en")}
+            className="px-3 py-1.5 rounded-lg border text-xs font-semibold hover:bg-gray-50">
+            {lang==="en"? "اردو" : "English"}
+          </button>
+          {user && (
+            <button onClick={()=>onNav("profile")} className="flex items-center gap-2">
+              <Avatar kind={user.gender==="Female"?"female":"male"} size={32}/>
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ---------------- Bottom Nav ---------------- */
+function BottomNav({view, onNav, unreadMsgs, unreadNotifs}){
+  const items = [
+    {id:"home", label:"Home", icon:"🏠"},
+    {id:"search", label:"Search", icon:"🔍"},
+    {id:"matchmakers", label:"Hire", icon:"💎"},
+    {id:"chat", label:"Chat", icon:"💬", badge: unreadMsgs},
+    {id:"profile", label:"Profile", icon:"👤"},
+  ];
+  return (
+    <div className="fixed bottom-0 inset-x-0 z-30 bg-white/95 backdrop-blur border-t border-gray-200">
+      <div className="max-w-6xl mx-auto grid grid-cols-5">
+        {items.map(it=>(
+          <button key={it.id} onClick={()=>onNav(it.id)}
+            className={"relative flex flex-col items-center justify-center py-2.5 text-xs font-semibold "+(view===it.id?"nav-active":"text-gray-500")}>
+            <span className="text-lg relative">
+              {it.icon}
+              {it.badge>0 && <span className="absolute -top-1 -right-2 min-w-[16px] h-4 px-1 rounded-full bg-red-600 text-white text-[9px] font-bold flex items-center justify-center animate-pulse">{it.badge>9?"9+":it.badge}</span>}
+            </span>
+            <span className="mt-0.5">{it.label}</span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/* ---------------- Banner Carousel ---------------- */
+function BannerCarousel({banners}){
+  const [i, setI] = useState(0);
+  useEffect(()=>{
+    if(!banners.length) return;
+    const t = setInterval(()=> setI(x=>(x+1)%banners.length), 5000);
+    return ()=>clearInterval(t);
+  },[banners.length]);
+  if(!banners.length) return null;
+  const b = banners[i];
+  return (
+    <section className="relative" style={{background:b.bgColor||"#0f766e"}}>
+      <div className="max-w-6xl mx-auto px-5 py-8 text-white flex items-center justify-between">
+        <div>
+          <div className="text-2xl font-display">{b.title}</div>
+          <div className="text-white/80 text-sm mt-1">{b.subtitle}</div>
+        </div>
+        <div className="text-5xl">{b.image||"🌙"}</div>
+      </div>
+      <div className="flex justify-center gap-1 pb-2">
+        {banners.map((_,idx)=> <button key={idx} onClick={()=>setI(idx)} className={"w-2 h-2 rounded-full "+(idx===i?"bg-white":"bg-white/40")}/>)}
+      </div>
+    </section>
+  );
+}
+
+/* ---------------- Blog Section ---------------- */
+function BlogSection({blogs, onOpen}){
+  if(!blogs.length) return null;
+  return (
+    <section className="max-w-6xl mx-auto px-5 py-14">
+      <h2 className="font-display text-3xl text-emerald-brand">Latest from our Blog</h2>
+      <p className="font-urdu text-xl text-gray-600 mt-1">ہمارے بلاگ سے تازہ ترین</p>
+      <div className="grid md:grid-cols-3 gap-5 mt-8">
+        {blogs.slice(0,6).map(b=>(
+          <button key={b._id} onClick={()=>onOpen(b)} className="text-left bg-white rounded-2xl shadow-card border border-gray-100 overflow-hidden hover:-translate-y-1 transition-all">
+            <div className="h-32 flex items-center justify-center text-5xl gradient-card">{b.coverImage||"📝"}</div>
+            <div className="p-4">
+              <div className="font-semibold">{b.title}</div>
+              <div className="text-sm text-gray-600 mt-1">{b.excerpt}</div>
+              <div className="text-xs text-gray-400 mt-2">{b.author} • {new Date(b.createdAt).toLocaleDateString()}</div>
+            </div>
+          </button>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+/* ---------------- Blog Modal ---------------- */
+function BlogModal({blog, onClose}){
+  if(!blog) return null;
+  return (
+    <div className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm flex items-center justify-center p-5">
+      <div className="bg-white max-w-3xl w-full rounded-3xl max-h-[90vh] overflow-y-auto">
+        <div className="sticky top-0 bg-white border-b px-5 py-3 flex items-center justify-between">
+          <div className="font-semibold">{blog.title}</div>
+          <button onClick={onClose} className="text-gray-500">✕</button>
+        </div>
+        <div className="p-6">
+          <div className="text-6xl mb-3">{blog.coverImage||"📝"}</div>
+          <div className="text-xs text-gray-500">{blog.author} • {new Date(blog.createdAt).toLocaleDateString()}</div>
+          <h1 className="font-display text-3xl mt-2">{blog.title}</h1>
+          <p className="text-gray-700 mt-2 italic">{blog.excerpt}</p>
+          <div className="mt-4 whitespace-pre-line text-gray-800 leading-relaxed">{blog.content}</div>
+          <div className="mt-4 flex flex-wrap gap-1">
+            {(blog.tags||[]).map(t=> <span key={t} className="chip bg-emerald-50 text-emerald-700">#{t}</span>)}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ---------------- Contact Form ---------------- */
+function ContactSection({settings}){
+  const [form, setForm] = useState({ name:"", email:"", phone:"", subject:"", message:"" });
+  const [sent, setSent] = useState(false);
+  const [sending, setSending] = useState(false);
+  const submit = async (e)=>{
+    e.preventDefault();
+    if(!form.name || !form.email || !form.message) { alert("Name, email and message are required"); return; }
+    setSending(true);
+    const res = await api("/api/contact", { method:"POST", body: form });
+    setSending(false);
+    if(res?.ok) { setSent(true); setForm({ name:"", email:"", phone:"", subject:"", message:"" }); }
+    else {
+      // Offline fallback: save to localStorage
+      const local = JSON.parse(localStorage.getItem("rishta_contacts")||"[]");
+      local.push({ ...form, _id:"local-"+Date.now(), status:"new", createdAt:new Date().toISOString() });
+      localStorage.setItem("rishta_contacts", JSON.stringify(local));
+      setSent(true); setForm({ name:"", email:"", phone:"", subject:"", message:"" });
+    }
+  };
+  return (
+    <section id="contact" className="bg-white border-t border-gray-100">
+      <div className="max-w-6xl mx-auto px-5 py-14 grid md:grid-cols-2 gap-10">
+        <div>
+          <h2 className="font-display text-3xl text-emerald-brand">Get in Touch</h2>
+          <p className="font-urdu text-xl text-gray-600 mt-1">ہم سے رابطہ کریں</p>
+          <p className="text-gray-600 mt-3">
+            Have a question, suggestion or feedback? Send us a message and our team will respond within 24 hours, in sha Allah.
+          </p>
+          <div className="mt-5 space-y-2 text-sm">
+            <div className="flex items-center gap-2">📧 <a href={"mailto:"+(settings?.contactEmail||"info@rishtaconnect.com")} className="text-emerald-brand">{settings?.contactEmail||"info@rishtaconnect.com"}</a></div>
+            <div className="flex items-center gap-2">📞 {settings?.contactPhone||"+92-300-1234567"}</div>
+            <div className="flex items-center gap-2">💬 WhatsApp: {settings?.whatsapp||"+92-300-1234567"}</div>
+            <div className="flex items-center gap-2">📍 {settings?.address||"Lahore, Pakistan"}</div>
+          </div>
+          <div className="mt-4 flex gap-2">
+            {settings?.facebook && <a href={settings.facebook} target="_blank" className="px-3 py-2 rounded-lg border text-sm">Facebook</a>}
+            {settings?.instagram && <a href={settings.instagram} target="_blank" className="px-3 py-2 rounded-lg border text-sm">Instagram</a>}
+            {settings?.twitter && <a href={settings.twitter} target="_blank" className="px-3 py-2 rounded-lg border text-sm">Twitter</a>}
+            {settings?.youtube && <a href={settings.youtube} target="_blank" className="px-3 py-2 rounded-lg border text-sm">YouTube</a>}
+          </div>
+        </div>
+        <form onSubmit={submit} className="bg-cream rounded-3xl p-6 border">
+          {sent ? (
+            <div className="text-center py-10">
+              <div className="text-5xl">✅</div>
+              <div className="font-semibold mt-2">Message Sent!</div>
+              <div className="text-sm text-gray-600 mt-1">JazakAllah for reaching out. We'll respond soon.</div>
+              <button type="button" onClick={()=>setSent(false)} className="mt-4 btn-primary px-4 py-2 rounded-xl">Send Another</button>
+            </div>
+          ) : (
+            <>
+              <input className="inp mb-3" placeholder="Your Name *" value={form.name} onChange={e=>setForm({...form, name:e.target.value})}/>
+              <input className="inp mb-3" placeholder="Email *" type="email" value={form.email} onChange={e=>setForm({...form, email:e.target.value})}/>
+              <input className="inp mb-3" placeholder="Phone (optional)" value={form.phone} onChange={e=>setForm({...form, phone:e.target.value})}/>
+              <input className="inp mb-3" placeholder="Subject" value={form.subject} onChange={e=>setForm({...form, subject:e.target.value})}/>
+              <textarea className="inp mb-3" rows="4" placeholder="Your message... *" value={form.message} onChange={e=>setForm({...form, message:e.target.value})}/>
+              <button type="submit" disabled={sending} className="btn-primary w-full py-3 rounded-xl font-semibold">
+                {sending?"Sending...":"Send Message"}
+              </button>
+            </>
+          )}
+        </form>
+      </div>
+    </section>
+  );
+}
+
+/* ---------------- Landing Page ---------------- */
+function Landing({onStart, onLogin}){
+  const [banners, setBanners] = useState([]);
+  const [blogs, setBlogs] = useState([]);
+  const [settings, setSettings] = useState(null);
+  const [activeBlog, setActiveBlog] = useState(null);
+
+  useEffect(()=>{
+    (async ()=>{
+      const [b, bl, s] = await Promise.all([
+        api("/api/banners"), api("/api/blogs"), api("/api/settings")
+      ]);
+      // Fallback to defaults if backend is offline
+      setBanners(b || [
+        { _id:"d1", title:"Welcome to RishtaConnect", subtitle:"Pakistan's most trusted verified matrimonial platform", image:"🌙", bgColor:"#0f766e" },
+        { _id:"d2", title:"Eid Special — 50% off Premium", subtitle:"Upgrade and unlock unlimited matches", image:"🎁", bgColor:"#c8a25b" },
+        { _id:"d3", title:"Now in 6 Countries", subtitle:"PK • UAE • KSA • UK • USA • Canada", image:"🌍", bgColor:"#134e4a" }
+      ]);
+      setBlogs(bl || [
+        { _id:"b1", title:"5 Tips for a Successful Rishta Search", excerpt:"Patience, sincerity and family involvement.", content:"Finding the right partner is a sacred journey...", coverImage:"🌙", author:"RishtaConnect Team", tags:["Marriage","Tips"], createdAt:new Date() },
+        { _id:"b2", title:"How RishtaConnect Verifies Profiles", excerpt:"Our 6-step verification process.", content:"We verify CNIC, face, family and more...", coverImage:"✅", author:"Trust Team", tags:["Verification","Safety"], createdAt:new Date() },
+        { _id:"b3", title:"Success Story: Ahmad & Fatima", excerpt:"From first message to nikkah in 4 months.", content:"Two families connected on RishtaConnect...", coverImage:"💚", author:"Stories", tags:["Success"], createdAt:new Date() }
+      ]);
+      setSettings(s);
+    })();
+  },[]);
+
+  return (
+    <div className="min-h-screen pattern-bg">
+      <BannerCarousel banners={banners}/>
+      <section className="relative gradient-hero text-white">
+        <div className="max-w-6xl mx-auto px-5 py-14 md:py-24">
+          <div className="grid md:grid-cols-2 gap-10 items-center">
+            <div className="fade-in">
+              <span className="chip bg-white/15 text-white border border-white/20">★ Trusted • Verified • AI-Powered</span>
+              <h1 className="font-display text-4xl md:text-6xl mt-4 leading-tight">
+                Find your <span className="text-gold">rishta</span> with trust & dignity.
+              </h1>
+              <p className="font-urdu text-2xl mt-3 text-white/90">
+                ایک قابلِ اعتماد، تصدیق شدہ مسلم میرج پلیٹ فارم — پاکستان اور بیرونِ ملک خاندانوں کے لیے۔
+              </p>
+              <p className="mt-4 text-white/85 max-w-md">
+                Verified profiles, family involvement, AI-powered matching, secure messaging — built for serious Muslim families.
+              </p>
+              <div className="mt-6 flex flex-wrap gap-3">
+                <button onClick={onStart} className="btn-gold px-6 py-3 rounded-xl font-semibold">Create Free Profile</button>
+                <button onClick={onLogin} className="px-6 py-3 rounded-xl bg-white/10 hover:bg-white/20 border border-white/20 font-semibold">Login</button>
+              </div>
+              <div className="mt-6 flex flex-wrap items-center gap-4 text-sm text-white/80">
+                <div className="flex items-center gap-1">✅ CNIC Verified</div>
+                <div className="flex items-center gap-1">🕌 Family Friendly</div>
+                <div className="flex items-center gap-1">🔒 Privacy First</div>
+              </div>
+            </div>
+            <div className="relative">
+              <div className="absolute -top-8 -left-6 w-72 rotate-[-4deg] bg-white text-gray-800 rounded-2xl p-4 shadow-2xl">
+                <div className="flex items-center gap-3">
+                  <Avatar kind="female" size={56}/>
+                  <div>
+                    <div className="font-semibold">Areeba Fatima</div>
+                    <div className="text-xs text-gray-500">24 • Islamabad • Teacher</div>
+                  </div>
+                </div>
+                <div className="mt-2 flex flex-wrap gap-1">
+                  <span className="chip badge-verified">✓ Verified</span>
+                  <span className="chip bg-emerald-50 text-emerald-700">Trust 88</span>
+                </div>
+              </div>
+              <div className="absolute -bottom-6 -right-2 w-72 rotate-[4deg] bg-white text-gray-800 rounded-2xl p-4 shadow-2xl">
+                <div className="flex items-center gap-3">
+                  <Avatar kind="male" size={56}/>
+                  <div>
+                    <div className="font-semibold">Zeeshan Ahmed</div>
+                    <div className="text-xs text-gray-500">29 • Lahore • Business</div>
+                  </div>
+                </div>
+                <div className="mt-2 flex flex-wrap gap-1">
+                  <span className="chip badge-verified">✓ Verified</span>
+                  <span className="chip badge-vip">VIP</span>
+                </div>
+              </div>
+              <div className="h-72 md:h-96"></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="max-w-6xl mx-auto px-5 py-14">
+        <h2 className="font-display text-3xl text-emerald-brand">Why RishtaConnect?</h2>
+        <p className="font-urdu text-xl text-gray-600 mt-1">رشتہ کنیکٹ کیوں؟</p>
+        <div className="grid md:grid-cols-3 gap-5 mt-8">
+          {[
+            {icon:"🛡️", t:"Verified Profiles", d:"CNIC, face, family and business verification — minimum fake profiles."},
+            {icon:"🤖", t:"AI Matching", d:"Compatibility based on faith, family, education and personality."},
+            {icon:"👨‍👩‍👧", t:"Family Friendly", d:"Parents and guardians can manage profiles & meeting requests."},
+            {icon:"🔒", t:"Privacy First", d:"Blurred photos, hidden phone numbers, screenshot protection."},
+            {icon:"💬", t:"Secure Chat", d:"Encrypted messaging, voice notes, no number leakage."},
+            {icon:"🌍", t:"Overseas Support", d:"Pakistan, UAE, KSA, UK, USA, Canada and more."}
+          ].map(f=>(
+            <div key={f.t} className="rounded-2xl p-5 bg-white shadow-card border border-gray-100">
+              <div className="text-3xl">{f.icon}</div>
+              <div className="font-semibold mt-2">{f.t}</div>
+              <div className="text-sm text-gray-600 mt-1">{f.d}</div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="bg-white border-t border-gray-100">
+        <div className="max-w-6xl mx-auto px-5 py-14">
+          <div className="grid md:grid-cols-4 gap-5 text-center">
+            {[
+              {n:"50k+", l:"Verified Profiles"},
+              {n:"12k+", l:"Successful Rishtas"},
+              {n:"96%", l:"Real CNIC Verified"},
+              {n:"6", l:"Countries Supported"}
+            ].map(s=>(
+              <div key={s.l}>
+                <div className="font-display text-4xl text-emerald-brand">{s.n}</div>
+                <div className="text-sm text-gray-600">{s.l}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Matchmaker Marketplace Promo */}
+      <section className="max-w-6xl mx-auto px-5 py-14">
+        <div className="rounded-3xl bg-gradient-to-br from-slate-900 to-emerald-900 text-white p-8 md:p-12 overflow-hidden relative">
+          <div className="absolute -top-10 -right-10 text-9xl opacity-10">💎</div>
+          <span className="chip bg-white/15 border border-white/20">💎 New: Matchmaker Marketplace</span>
+          <h3 className="font-display text-3xl md:text-4xl mt-3">Hire a Trusted Matchmaker</h3>
+          <p className="font-urdu text-xl text-white/85 mt-1">قابلِ اعتماد رشتہ ماہر کرایہ پر لیں</p>
+          <p className="mt-3 text-white/80 max-w-2xl">
+            Connect with verified professional matchmakers, consultants and family coordinators — Fiverr-style marketplace with ratings, levels and packages. From Free Consultation to VIP Full Service.
+          </p>
+          <div className="mt-5 grid grid-cols-2 md:grid-cols-5 gap-3">
+            {[
+              {l:"🥉 Bronze",d:"Starting Out"},
+              {l:"🥈 Silver",d:"Established"},
+              {l:"🥇 Gold",d:"Expert"},
+              {l:"💎 Elite",d:"Top 5%"},
+              {l:"👑 Royal",d:"Top 1%"}
+            ].map(x=>(
+              <div key={x.l} className="bg-white/10 rounded-2xl p-3 text-center border border-white/10">
+                <div className="text-lg">{x.l}</div>
+                <div className="text-[10px] text-white/60">{x.d}</div>
+              </div>
+            ))}
+          </div>
+          <button onClick={onStart} className="mt-5 btn-gold px-6 py-3 rounded-xl font-semibold">Browse Matchmakers</button>
+        </div>
+      </section>
+
+      {/* Testimonials */}
+      <section className="bg-white border-t border-gray-100">
+        <div className="max-w-6xl mx-auto px-5 py-14">
+          <div className="text-center">
+            <h2 className="font-display text-3xl text-emerald-brand">What Our Members Say</h2>
+            <p className="font-urdu text-xl text-gray-600 mt-1">ہمارے ممبران کیا کہتے ہیں</p>
+          </div>
+          <div className="grid md:grid-cols-3 gap-5 mt-8">
+            {[
+              { name:"Ahmad & Fatima", city:"Karachi → Multan", text:"Alhamdulillah, we matched in January and got married in April. Both families are happy and the verification gave us confidence.", rating:5, avatar:"male" },
+              { name:"Hira & Family", city:"Lahore", text:"Our matchmaker was incredible — she handled everything from first call to nikkah. The CRM tracking kept us updated.", rating:5, avatar:"female" },
+              { name:"Bilal Sheikh", city:"Toronto", text:"As an overseas Pakistani, RishtaConnect helped me connect with families back home with proper verification. JazakAllah.", rating:5, avatar:"male" },
+            ].map((t,i)=>(
+              <div key={i} className="bg-cream rounded-3xl p-6 border border-gray-100">
+                <div className="text-amber-500 text-lg">{"★".repeat(t.rating)}</div>
+                <p className="mt-3 text-gray-700">"{t.text}"</p>
+                <div className="mt-4 flex items-center gap-3">
+                  <Avatar kind={t.avatar} size={44}/>
+                  <div>
+                    <div className="font-semibold text-sm">{t.name}</div>
+                    <div className="text-xs text-gray-500">{t.city}</div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Success Stories */}
+      <section className="max-w-6xl mx-auto px-5 py-14">
+        <div className="text-center">
+          <h2 className="font-display text-3xl text-emerald-brand">Success Stories</h2>
+          <p className="font-urdu text-xl text-gray-600 mt-1">کامیابی کی کہانیاں</p>
+        </div>
+        <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4 mt-8">
+          {[
+            { cd:"Bilal ⟷ Areeba", time:"4 months", mm:"Naseem Aunty", flag:"🇵🇰", note:"Karachi → Multan" },
+            { cd:"Hamza ⟷ Sara", time:"6 months", mm:"Dr. Ahmad", flag:"🇦🇪", note:"Dubai based couple" },
+            { cd:"Ahmad ⟷ Mahnoor", time:"3 months", mm:"Fatima Khan", flag:"🇵🇰", note:"Doctor-Engineer match" },
+            { cd:"Zaid ⟷ Hira", time:"5 months", mm:"Hajra Begum", flag:"🇬🇧", note:"UK Pakistani diaspora" }
+          ].map((s,i)=>(
+            <div key={i} className="bg-white rounded-2xl shadow-card p-5">
+              <div className="text-3xl">💚</div>
+              <div className="font-semibold mt-2">{s.cd}</div>
+              <div className="text-sm text-gray-500">{s.note}</div>
+              <div className="mt-2 text-xs space-y-0.5">
+                <div>⏱ Time to nikkah: <b>{s.time}</b></div>
+                <div>💎 Matchmaker: <b>{s.mm}</b></div>
+                <div>{s.flag} Cross-country match</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* Pricing Section */}
+      <section className="bg-white border-t border-gray-100">
+        <div className="max-w-6xl mx-auto px-5 py-14">
+          <div className="text-center">
+            <h2 className="font-display text-3xl text-emerald-brand">Simple, Transparent Pricing</h2>
+            <p className="font-urdu text-xl text-gray-600 mt-1">سادہ اور شفاف قیمتیں</p>
+          </div>
+          <div className="grid md:grid-cols-3 gap-5 mt-8">
+            {[
+              { n:"Free", price:"PKR 0", urdu:"مفت", feats:["First 10 proposals (full preview)","Limited chat","Blurred photos","Basic filters","WhatsApp button"] },
+              { n:"Premium", price:"PKR 2,499/mo", urdu:"پریمیم", highlight:true, feats:["Unlimited proposals","Unlimited chat","View phone numbers","WhatsApp direct","Advanced filters","Save filter views","Profile boost"] },
+              { n:"VIP", price:"PKR 12,999/mo", urdu:"وی آئی پی", feats:["Dedicated matchmaker","Family meeting arrangements","Background verification","Priority support","All Premium features"] }
+            ].map(p=>(
+              <div key={p.n} className={"rounded-3xl p-6 border-2 "+(p.highlight?"border-emerald-brand shadow-soft bg-emerald-50":"border-gray-200 bg-white")}>
+                {p.highlight && <div className="chip badge-vip mb-2">⭐ Most Popular</div>}
+                <div className="font-display text-2xl">{p.n}</div>
+                <div className="font-urdu text-gray-500">{p.urdu}</div>
+                <div className="text-3xl font-bold mt-2">{p.price}</div>
+                <ul className="mt-3 space-y-1.5 text-sm">{p.feats.map(f=> <li key={f}>✓ {f}</li>)}</ul>
+                <button onClick={onStart} className={"mt-4 w-full py-2.5 rounded-xl font-semibold "+(p.highlight?"btn-primary":"border")}>Get Started</button>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* App Preview */}
+      <section className="bg-gradient-to-br from-emerald-900 to-slate-900 text-white">
+        <div className="max-w-6xl mx-auto px-5 py-14 grid md:grid-cols-2 gap-8 items-center">
+          <div>
+            <span className="chip bg-white/15 border border-white/20">📱 Coming to App Stores</span>
+            <h2 className="font-display text-3xl mt-3">Take RishtaConnect Anywhere</h2>
+            <p className="text-white/80 mt-2">Mobile-first design, push notifications, voice messages, video calls — all in your pocket.</p>
+            <div className="mt-4 flex gap-2">
+              <button className="px-5 py-3 rounded-xl bg-black/30 border border-white/20">📱 iOS App (Soon)</button>
+              <button className="px-5 py-3 rounded-xl bg-black/30 border border-white/20">🤖 Android App (Soon)</button>
+            </div>
+          </div>
+          <div className="relative">
+            <div className="bg-white text-gray-800 rounded-3xl p-4 shadow-2xl mx-auto max-w-xs">
+              <div className="bg-gradient-to-br from-emerald-700 to-emerald-900 text-white rounded-2xl p-4">
+                <div className="text-xs text-white/70">Assalamu Alaikum,</div>
+                <div className="font-display text-lg">Areeba Fatima</div>
+                <div className="mt-2 grid grid-cols-2 gap-2 text-xs">
+                  <div className="bg-white/10 rounded p-2">📊 Trust 88</div>
+                  <div className="bg-white/10 rounded p-2">💚 18 Interests</div>
+                </div>
+              </div>
+              <div className="mt-3 space-y-2 text-xs">
+                <div className="flex items-center gap-2 p-2 bg-emerald-50 rounded-lg"><Avatar kind="male" size={28}/><div><div className="font-semibold">Zeeshan Ahmed</div><div className="text-gray-500">87% Compatible</div></div></div>
+                <div className="flex items-center gap-2 p-2 bg-emerald-50 rounded-lg"><Avatar kind="male" size={28}/><div><div className="font-semibold">Hamza Khan</div><div className="text-gray-500">85% Compatible</div></div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Final CTA */}
+      <section className="max-w-6xl mx-auto px-5 py-14">
+        <div className="rounded-3xl gradient-hero text-white p-8 md:p-12 text-center">
+          <h3 className="font-display text-3xl">Ready to find your better half?</h3>
+          <p className="font-urdu text-xl mt-2 text-white/90">اپنا بہترین ہمسفر تلاش کرنے کے لیے تیار ہیں؟</p>
+          <button onClick={onStart} className="btn-gold mt-5 px-7 py-3 rounded-xl font-semibold">Create Free Profile</button>
+        </div>
+      </section>
+
+      <BlogSection blogs={blogs} onOpen={setActiveBlog}/>
+      <ContactSection settings={settings}/>
+
+      <footer className="bg-gray-900 text-gray-300">
+        <div className="max-w-6xl mx-auto px-5 py-10 grid md:grid-cols-4 gap-6 text-sm">
+          <div>
+            <div className="flex items-center gap-2">
+              <div className="w-9 h-9 rounded-xl gradient-hero flex items-center justify-center text-white font-bold">R</div>
+              <div className="font-display text-lg text-white">{settings?.siteName||"RishtaConnect"}</div>
+            </div>
+            <p className="mt-3 text-gray-400">{settings?.tagline||"Trusted Muslim Matrimony"}</p>
+          </div>
+          <div>
+            <div className="font-semibold text-white mb-2">Platform</div>
+            <div className="space-y-1">
+              <div>Browse Profiles</div>
+              <div>Verification</div>
+              <div>Subscription</div>
+              <div>Success Stories</div>
+            </div>
+          </div>
+          <div>
+            <div className="font-semibold text-white mb-2">Company</div>
+            <div className="space-y-1">
+              <div>About Us</div>
+              <div>Blog</div>
+              <a href="#contact">Contact</a>
+              <div>Careers</div>
+            </div>
+          </div>
+          <div>
+            <div className="font-semibold text-white mb-2">Legal</div>
+            <div className="space-y-1">
+              <div>Privacy Policy</div>
+              <div>Terms of Service</div>
+              <div>Refund Policy</div>
+              <div>Help Center</div>
+            </div>
+          </div>
+        </div>
+        <div className="border-t border-gray-800 py-4 text-center text-xs text-gray-500">
+          {settings?.footerText || ("© " + new Date().getFullYear() + " RishtaConnect — Trusted Muslim Matrimony Platform")}
+        </div>
+      </footer>
+      <BlogModal blog={activeBlog} onClose={()=>setActiveBlog(null)}/>
+    </div>
+  );
+}
+
+/* ---------------- Auth ---------------- */
+function AuthScreen({mode, onAuth, onSwitch}){
+  const [form, setForm] = useState({ name:"", email:"", phone:"", password:"", gender:"Male" });
+  const [step, setStep] = useState("form");
+  const [otp, setOtp] = useState("");
+  const onSubmit = ()=>{
+    if(mode==="signup") setStep("otp"); else onAuth(form, "login");
+  };
+  return (
+    <div className="min-h-screen pattern-bg flex items-center justify-center p-5">
+      <div className="w-full max-w-md bg-white rounded-3xl shadow-soft p-7">
+        <div className="flex items-center gap-2 mb-4">
+          <div className="w-10 h-10 rounded-xl gradient-hero flex items-center justify-center text-white font-bold">R</div>
+          <div>
+            <div className="font-display text-xl text-emerald-brand">RishtaConnect</div>
+            <div className="font-urdu text-sm text-gray-500">رشتہ کنیکٹ</div>
+          </div>
+        </div>
+        <h2 className="font-display text-2xl">{mode==="signup"?"Create Account":"Welcome Back"}</h2>
+        <p className="font-urdu text-gray-600 mt-1">{mode==="signup"?"اکاؤنٹ بنائیں":"خوش آمدید"}</p>
+
+        {step==="form" && (
+          <div className="mt-5 space-y-3">
+            {mode==="signup" && (
+              <>
+                <input value={form.name} onChange={e=>setForm({...form, name:e.target.value})} placeholder="Full Name / پورا نام" className="w-full px-4 py-3 rounded-xl border border-gray-200"/>
+                <div className="grid grid-cols-2 gap-3">
+                  <select value={form.gender} onChange={e=>setForm({...form, gender:e.target.value})} className="w-full px-4 py-3 rounded-xl border border-gray-200">
+                    <option>Male</option><option>Female</option>
+                  </select>
+                  <input value={form.phone} onChange={e=>setForm({...form, phone:e.target.value})} placeholder="Phone +92…" className="w-full px-4 py-3 rounded-xl border border-gray-200"/>
+                </div>
+              </>
+            )}
+            <input value={form.email} onChange={e=>setForm({...form, email:e.target.value})} placeholder="Email / ای میل" className="w-full px-4 py-3 rounded-xl border border-gray-200"/>
+            <input type="password" value={form.password} onChange={e=>setForm({...form, password:e.target.value})} placeholder="Password / پاس ورڈ" className="w-full px-4 py-3 rounded-xl border border-gray-200"/>
+            <button onClick={onSubmit} className="btn-primary w-full py-3 rounded-xl font-semibold">
+              {mode==="signup"?"Continue":"Login"}
+            </button>
+            <div className="text-center text-xs text-gray-500">or continue with</div>
+            <div className="grid grid-cols-3 gap-2">
+              <button className="py-2 rounded-xl border hover:bg-gray-50 text-sm">Google</button>
+              <button className="py-2 rounded-xl border hover:bg-gray-50 text-sm">Apple</button>
+              <button className="py-2 rounded-xl border hover:bg-gray-50 text-sm">Phone</button>
+            </div>
+            <div className="text-center text-sm mt-2">
+              {mode==="signup" ? (
+                <span>Already have an account? <button onClick={()=>onSwitch("login")} className="text-emerald-brand font-semibold">Login</button></span>
+              ) : (
+                <span>New here? <button onClick={()=>onSwitch("signup")} className="text-emerald-brand font-semibold">Sign Up</button></span>
+              )}
+            </div>
+          </div>
+        )}
+
+        {step==="otp" && (
+          <div className="mt-5 space-y-3">
+            <div className="text-sm text-gray-600">We sent an OTP to <b>{form.phone||form.email}</b>. Enter <b>123456</b> to continue.</div>
+            <input value={otp} onChange={e=>setOtp(e.target.value)} placeholder="6-digit OTP" className="w-full px-4 py-3 rounded-xl border border-gray-200 tracking-widest text-center"/>
+            <button onClick={()=>otp==="123456" ? onAuth(form, "signup") : alert("Use 123456 for demo")} className="btn-primary w-full py-3 rounded-xl font-semibold">Verify & Continue</button>
+            <div className="text-xs text-gray-500 text-center">2FA enabled • Encrypted authentication</div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ---------------- Profile Setup (Biodata) ---------------- */
+function ProfileSetup({initial, onSave, onCancel}){
+  const [step, setStep] = useState(0);
+  const [data, setData] = useState({
+    name:initial?.name||"", age:initial?.age||"", height:"", maritalStatus:"Never Married",
+    gender:initial?.gender||"Male", city:"Lahore", country:"Pakistan", nationality:"Pakistani",
+    sect:"Sunni", languages:["Urdu","English"],
+    qualification:"Bachelors", university:"", profession:"", company:"", income:incomeRanges[2], jobType:"Full-Time", overseas:false,
+    fatherProfession:"", motherProfession:"", siblings:"", familyType:"Moderate", ownHouse:true, familyBackground:"",
+    namaz:"Regular", hijab:"-", religiousLevel:"Practising",
+    nature:"", hobbies:[], smoking:"No", futureGoals:"",
+    preferences:{ ageRange:"22-30", city:"Any", education:"Graduate+", religious:"Practising", familyType:"Moderate", income:"Any" },
+    photos:[], blurPhoto:true, bio:"", timeline:"Within 1 year",
+    ...initial
+  });
+  const steps = ["Personal","Education","Family","Religion","Personality","Preferences","Photos & Bio"];
+  const update = (k,v)=> setData(d=>({...d,[k]:v}));
+  const updatePref = (k,v)=> setData(d=>({...d, preferences:{...d.preferences,[k]:v}}));
+
+  return (
+    <div className="max-w-3xl mx-auto p-5 pb-28">
+      <div className="bg-white rounded-2xl shadow-card p-6">
+        <div className="flex items-center justify-between mb-1">
+          <div>
+            <h2 className="font-display text-2xl text-emerald-brand">Create Your Biodata</h2>
+            <p className="font-urdu text-gray-500">اپنا بایوڈیٹا مکمل کریں</p>
+          </div>
+          <div className="text-sm text-gray-500">Step {step+1} / {steps.length}</div>
+        </div>
+        <div className="mt-3 h-2 rounded-full bg-gray-100 overflow-hidden">
+          <div className="h-full bg-emerald-brand" style={{width:`${((step+1)/steps.length)*100}%`}}/>
+        </div>
+        <div className="mt-4 text-emerald-brand font-semibold">{steps[step]}</div>
+
+        <div className="mt-4 space-y-3">
+          {step===0 && (
+            <div className="grid md:grid-cols-2 gap-3">
+              <Field label="Full Name / پورا نام"><input className="inp" value={data.name} onChange={e=>update("name",e.target.value)}/></Field>
+              <Field label="Date of Birth"><input type="date" className="inp" onChange={e=>{
+                const age = new Date().getFullYear() - new Date(e.target.value).getFullYear();
+                update("age", age);
+              }}/></Field>
+              <Field label="Age"><input className="inp" value={data.age} onChange={e=>update("age",e.target.value)}/></Field>
+              <Field label="Gender"><select className="inp" value={data.gender} onChange={e=>update("gender",e.target.value)}><option>Male</option><option>Female</option></select></Field>
+              <Field label="Height"><input className="inp" value={data.height} onChange={e=>update("height",e.target.value)} placeholder="5'8&quot;"/></Field>
+              <Field label="Marital Status"><select className="inp" value={data.maritalStatus} onChange={e=>update("maritalStatus",e.target.value)}>{maritalStatuses.map(x=><option key={x}>{x}</option>)}</select></Field>
+              <Field label="City"><select className="inp" value={data.city} onChange={e=>update("city",e.target.value)}>{cities.map(c=><option key={c}>{c}</option>)}</select></Field>
+              <Field label="Country"><select className="inp" value={data.country} onChange={e=>update("country",e.target.value)}>{countries.map(c=><option key={c}>{c}</option>)}</select></Field>
+              <Field label="Nationality"><input className="inp" value={data.nationality} onChange={e=>update("nationality",e.target.value)}/></Field>
+              <Field label="Sect"><select className="inp" value={data.sect} onChange={e=>update("sect",e.target.value)}>{sects.map(s=><option key={s}>{s}</option>)}</select></Field>
+            </div>
+          )}
+          {step===1 && (
+            <div className="grid md:grid-cols-2 gap-3">
+              <Field label="Qualification"><select className="inp" value={data.qualification} onChange={e=>update("qualification",e.target.value)}>{educations.map(x=><option key={x}>{x}</option>)}</select></Field>
+              <Field label="University"><input className="inp" value={data.university} onChange={e=>update("university",e.target.value)}/></Field>
+              <Field label="Profession"><select className="inp" value={data.profession} onChange={e=>update("profession",e.target.value)}>{professions.map(x=><option key={x}>{x}</option>)}</select></Field>
+              <Field label="Company / Business"><input className="inp" value={data.company} onChange={e=>update("company",e.target.value)}/></Field>
+              <Field label="Monthly Income"><select className="inp" value={data.income} onChange={e=>update("income",e.target.value)}>{incomeRanges.map(x=><option key={x}>{x}</option>)}</select></Field>
+              <Field label="Job Type"><select className="inp" value={data.jobType} onChange={e=>update("jobType",e.target.value)}><option>Full-Time</option><option>Self-Employed</option><option>Freelance</option><option>Govt</option><option>Other</option></select></Field>
+              <Field label="Overseas?"><select className="inp" value={data.overseas?"Yes":"No"} onChange={e=>update("overseas",e.target.value==="Yes")}><option>No</option><option>Yes</option></select></Field>
+            </div>
+          )}
+          {step===2 && (
+            <div className="grid md:grid-cols-2 gap-3">
+              <Field label="Father's Profession"><input className="inp" value={data.fatherProfession} onChange={e=>update("fatherProfession",e.target.value)}/></Field>
+              <Field label="Mother's Profession"><input className="inp" value={data.motherProfession} onChange={e=>update("motherProfession",e.target.value)}/></Field>
+              <Field label="Siblings"><input className="inp" value={data.siblings} onChange={e=>update("siblings",e.target.value)} placeholder="2 brothers, 1 sister"/></Field>
+              <Field label="Family Type"><select className="inp" value={data.familyType} onChange={e=>update("familyType",e.target.value)}><option>Religious</option><option>Moderate Religious</option><option>Moderate</option><option>Liberal</option></select></Field>
+              <Field label="Own House?"><select className="inp" value={data.ownHouse?"Yes":"No"} onChange={e=>update("ownHouse",e.target.value==="Yes")}><option>Yes</option><option>No</option></select></Field>
+              <Field label="Family Background" full>
+                <textarea className="inp" rows="3" value={data.familyBackground} onChange={e=>update("familyBackground",e.target.value)}/>
+              </Field>
+            </div>
+          )}
+          {step===3 && (
+            <div className="grid md:grid-cols-2 gap-3">
+              <Field label="Namaz"><select className="inp" value={data.namaz} onChange={e=>update("namaz",e.target.value)}><option>Regular (5 times)</option><option>Mostly</option><option>Jumma + Eid</option><option>Trying to improve</option></select></Field>
+              {data.gender==="Female" && (
+                <Field label="Hijab"><select className="inp" value={data.hijab} onChange={e=>update("hijab",e.target.value)}><option>-</option><option>Yes</option><option>Modest dress</option><option>Niqab</option></select></Field>
+              )}
+              <Field label="Religious Level"><select className="inp" value={data.religiousLevel} onChange={e=>update("religiousLevel",e.target.value)}><option>Practising</option><option>Moderate</option><option>Liberal</option></select></Field>
+            </div>
+          )}
+          {step===4 && (
+            <div className="grid md:grid-cols-2 gap-3">
+              <Field label="Nature"><input className="inp" value={data.nature} onChange={e=>update("nature",e.target.value)} placeholder="Calm, family-oriented…"/></Field>
+              <Field label="Hobbies (comma)"><input className="inp" value={(data.hobbies||[]).join(", ")} onChange={e=>update("hobbies",e.target.value.split(",").map(s=>s.trim()).filter(Boolean))}/></Field>
+              <Field label="Smoking"><select className="inp" value={data.smoking} onChange={e=>update("smoking",e.target.value)}><option>No</option><option>Yes</option><option>Occasionally</option></select></Field>
+              <Field label="Future Goals" full>
+                <textarea className="inp" rows="2" value={data.futureGoals} onChange={e=>update("futureGoals",e.target.value)}/>
+              </Field>
+            </div>
+          )}
+          {step===5 && (
+            <div className="grid md:grid-cols-2 gap-3">
+              <Field label="Preferred Age"><input className="inp" value={data.preferences.ageRange} onChange={e=>updatePref("ageRange",e.target.value)} placeholder="24-30"/></Field>
+              <Field label="Preferred City"><input className="inp" value={data.preferences.city} onChange={e=>updatePref("city",e.target.value)}/></Field>
+              <Field label="Education"><input className="inp" value={data.preferences.education} onChange={e=>updatePref("education",e.target.value)}/></Field>
+              <Field label="Income Range"><input className="inp" value={data.preferences.income} onChange={e=>updatePref("income",e.target.value)}/></Field>
+              <Field label="Religious Expectations"><input className="inp" value={data.preferences.religious} onChange={e=>updatePref("religious",e.target.value)}/></Field>
+              <Field label="Family Type"><input className="inp" value={data.preferences.familyType} onChange={e=>updatePref("familyType",e.target.value)}/></Field>
+              <Field label="Marriage Timeline" full><select className="inp" value={data.timeline} onChange={e=>update("timeline",e.target.value)}><option>Ready now</option><option>Within 1 year</option><option>Just exploring</option></select></Field>
+            </div>
+          )}
+          {step===6 && (
+            <div className="space-y-4">
+              <Field label="About You (Short Bio)" full>
+                <textarea className="inp" rows="4" value={data.bio} onChange={e=>update("bio",e.target.value)} placeholder="Assalamu Alaikum, I am…"/>
+              </Field>
+              <Field label="Photo Privacy">
+                <select className="inp" value={data.blurPhoto?"Blurred":"Visible"} onChange={e=>update("blurPhoto",e.target.value==="Blurred")}>
+                  <option>Blurred</option><option>Visible</option>
+                </select>
+              </Field>
+              <div className="rounded-xl border-2 border-dashed border-emerald-200 p-5 text-center bg-emerald-50/40">
+                <div className="text-4xl">📷</div>
+                <div className="font-semibold mt-1">Upload Photos (max 5)</div>
+                <div className="text-xs text-gray-500">Demo: photos handled by avatar. In production → Cloudinary/S3 free tier.</div>
+                <div className="mt-2 flex justify-center gap-2">
+                  <span className="chip bg-white border">🎙️ Voice intro (optional)</span>
+                  <span className="chip bg-white border">🎥 Video intro (optional)</span>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="mt-6 flex items-center justify-between">
+          <button onClick={()=> step===0 ? onCancel?.() : setStep(step-1)} className="px-4 py-2 rounded-xl border">{step===0?"Cancel":"Back"}</button>
+          {step<steps.length-1 ? (
+            <button onClick={()=>setStep(step+1)} className="btn-primary px-5 py-2 rounded-xl font-semibold">Next</button>
+          ) : (
+            <button onClick={()=>onSave(data)} className="btn-primary px-5 py-2 rounded-xl font-semibold">Save Biodata</button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+function Field({label, children, full}){
+  return (
+    <label className={"block "+(full?"md:col-span-2":"")}>
+      <span className="text-xs font-semibold text-gray-600">{label}</span>
+      <div className="mt-1">{children}</div>
+    </label>
+  );
+}
+
+/* ---------------- Home (CRM-style Dashboard) ---------------- */
+function Home({user, users, onNav, onOpen}){
+  const recommended = useMemo(()=>{
+    const opp = users.filter(u=> u.id!==user.id && u.gender!==user.gender);
+    return opp.map(u=>({...u, score:compatibility(user,u)})).sort((a,b)=>b.score-a.score).slice(0,5);
+  },[users,user]);
+
+  // Profile completion %
+  const profileFields = ["name","age","height","city","profession","qualification","bio","photos","preferences","familyType","religiousLevel","hobbies"];
+  const filled = profileFields.filter(k=>{
+    const v = user[k]; return v && (Array.isArray(v) ? v.length : Object.keys(v||{}).length || typeof v === "string" ? v.length : true);
+  }).length;
+  const completion = Math.round((filled/profileFields.length)*100);
+
+  const hired = JSON.parse(localStorage.getItem("rishta_hired_matchmakers")||"[]");
+  const meetings = JSON.parse(localStorage.getItem("rishta_meetings_"+user.id)||"[]");
+  const upcoming = meetings.filter(m=> new Date(m.date+"T"+m.time) > new Date()).slice(0,2);
+  const viewedCount = (JSON.parse(localStorage.getItem("rishta_viewed_profiles")||"[]")).length;
+
+  return (
+    <div className="max-w-6xl mx-auto p-5 pb-24">
+      {/* Hero / Welcome */}
+      <div className="rounded-3xl gradient-hero text-white p-6 md:p-8 shadow-soft">
+        <div className="flex items-center justify-between">
+          <div>
+            <div className="text-white/80 text-sm">Assalamu Alaikum,</div>
+            <div className="font-display text-2xl md:text-3xl">{user.name||"Guest"}</div>
+            <div className="font-urdu text-white/80 mt-1">آپ کے میچز تیار ہیں</div>
+          </div>
+          <div className="hidden md:flex gap-2">
+            <button onClick={()=>onNav("search")} className="px-4 py-2 rounded-xl bg-white/10 border border-white/20">🔍 Search</button>
+            <button onClick={()=>onNav("matches")} className="px-4 py-2 rounded-xl bg-white/15 border border-white/20">💚 Matches</button>
+            <button onClick={()=>onNav("matchmakers")} className="px-4 py-2 rounded-xl bg-white/15 border border-white/20">💎 Hire</button>
+          </div>
+        </div>
+        <div className="mt-5 grid grid-cols-2 md:grid-cols-4 gap-3">
+          <Stat label="Profile Views" value="124"/>
+          <Stat label="Interests" value="18"/>
+          <Stat label="Trust Score" value={(user.trustScore||60)+"/100"}/>
+          <Stat label="Plan" value={user.plan||"Free"}/>
+        </div>
+      </div>
+
+      {/* CRM Cards Row */}
+      <div className="grid md:grid-cols-3 gap-4 mt-5">
+        {/* Profile Completion */}
+        <div className="bg-white rounded-2xl shadow-card p-5">
+          <div className="flex items-center justify-between">
+            <div className="font-semibold">Profile Completion</div>
+            <div className="text-2xl font-bold text-emerald-brand">{completion}%</div>
+          </div>
+          <div className="mt-2 h-2 bg-gray-100 rounded-full overflow-hidden">
+            <div className="h-full bg-gradient-to-r from-emerald-500 to-emerald-700" style={{width:completion+"%"}}/>
+          </div>
+          <div className="mt-3 text-xs text-gray-600">
+            {completion < 100 ? "Complete your biodata to boost match quality" : "✓ Your profile is complete!"}
+          </div>
+          <button onClick={()=>onNav("setup")} className="mt-3 w-full py-2 rounded-xl border text-sm font-semibold">
+            {completion < 100 ? "Complete Biodata →" : "Edit Biodata"}
+          </button>
+        </div>
+
+        {/* Verification Card */}
+        <div className="bg-white rounded-2xl shadow-card p-5">
+          <div className="flex items-center justify-between">
+            <div className="font-semibold">Verification</div>
+            <CompatRing score={user.trustScore||60}/>
+          </div>
+          <div className="mt-2 grid grid-cols-3 gap-1 text-[10px]">
+            {["phone","email","cnic","face","family","business"].map(v=>(
+              <div key={v} className={"text-center p-1 rounded "+(user.verifications?.[v]?"bg-emerald-50 text-emerald-700":"bg-gray-50 text-gray-400")}>
+                {user.verifications?.[v]?"✓":"○"} {v}
+              </div>
+            ))}
+          </div>
+          <button onClick={()=>onNav("verify")} className="mt-3 w-full py-2 rounded-xl border text-sm font-semibold">Boost Trust →</button>
+        </div>
+
+        {/* Premium Preview Card */}
+        <div className="bg-gradient-to-br from-amber-100 to-amber-50 rounded-2xl shadow-card p-5 border border-amber-200">
+          <div className="flex items-center justify-between">
+            <div className="font-semibold text-amber-900">🎁 Free Premium</div>
+            <div className="text-2xl font-bold text-amber-700">{Math.max(0, 10-viewedCount)}</div>
+          </div>
+          <div className="text-xs text-amber-700 mt-2">First 10 profiles unlock all features free</div>
+          <div className="mt-3 h-2 bg-white/50 rounded-full overflow-hidden">
+            <div className="h-full bg-amber-500" style={{width: Math.min(100, viewedCount*10)+"%"}}/>
+          </div>
+          <div className="text-xs text-amber-700 mt-2">{viewedCount} of 10 used</div>
+        </div>
+      </div>
+
+      {/* Hired Matchmaker + Meetings Row */}
+      <div className="grid md:grid-cols-2 gap-4 mt-5">
+        <div className="bg-white rounded-2xl shadow-card p-5">
+          <div className="flex items-center justify-between">
+            <div className="font-semibold">Your Matchmaker</div>
+            {hired.length>0 && <span className="chip bg-emerald-100 text-emerald-700">🟢 Active</span>}
+          </div>
+          {hired.length===0 ? (
+            <div className="mt-3 text-center py-3">
+              <div className="text-3xl">💎</div>
+              <div className="text-sm text-gray-600 mt-1">No matchmaker yet</div>
+              <button onClick={()=>onNav("matchmakers")} className="mt-2 btn-primary px-4 py-2 rounded-xl text-sm">Browse Matchmakers</button>
+            </div>
+          ) : (
+            <div className="mt-3">
+              <div className="flex items-center gap-3">
+                <Avatar kind={hired[0].matchmaker.photo} size={48}/>
+                <div className="flex-1">
+                  <div className="font-semibold text-sm">{hired[0].matchmaker.name}</div>
+                  <div className="text-xs text-gray-500">{hired[0].matchmaker.level} • {hired[0].pkg.name}</div>
+                </div>
+              </div>
+              <button onClick={()=>onNav("matchmakers")} className="mt-3 w-full py-2 rounded-xl border text-sm">View Details</button>
+            </div>
+          )}
+        </div>
+
+        <div className="bg-white rounded-2xl shadow-card p-5">
+          <div className="flex items-center justify-between">
+            <div className="font-semibold">Upcoming Meetings</div>
+            <button onClick={()=>onNav("meetings")} className="text-xs text-emerald-brand font-semibold">View All →</button>
+          </div>
+          {upcoming.length===0 ? (
+            <div className="mt-3 text-center py-3">
+              <div className="text-3xl">📅</div>
+              <div className="text-sm text-gray-600 mt-1">No upcoming meetings</div>
+              <button onClick={()=>onNav("meetings")} className="mt-2 btn-primary px-4 py-2 rounded-xl text-sm">Schedule Meeting</button>
+            </div>
+          ) : (
+            <div className="mt-3 space-y-2">
+              {upcoming.map(m=>(
+                <div key={m.id} className="p-2 rounded-xl bg-emerald-50 text-sm">
+                  <div className="font-semibold">{m.title}</div>
+                  <div className="text-xs text-gray-600">📅 {m.date} at {m.time}</div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Recent Activity */}
+      <div className="bg-white rounded-2xl shadow-card p-5 mt-5">
+        <div className="flex items-center justify-between">
+          <div className="font-semibold">Recent Activity</div>
+          <span className="text-xs text-gray-500">Last 7 days</span>
+        </div>
+        <div className="mt-3 space-y-2 text-sm">
+          <ActivityItem icon="💚" text="Hamza Khan sent you an interest" time="2h ago"/>
+          <ActivityItem icon="✅" text="Your CNIC verification approved" time="Yesterday"/>
+          <ActivityItem icon="👁" text="3 new profiles viewed your biodata" time="Yesterday"/>
+          <ActivityItem icon="💬" text="New message from Areeba Fatima" time="2 days ago"/>
+          <ActivityItem icon="📅" text="Family meeting request received" time="3 days ago"/>
+        </div>
+      </div>
+
+      <h3 className="mt-7 font-display text-xl text-gray-800">AI Recommended for You</h3>
+      <p className="font-urdu text-sm text-gray-500">آپ کے لیے تجویز کردہ</p>
+      <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4 mt-4">
+        {recommended.map(u=>(
+          <ProfileCard key={u.id} u={u} onOpen={()=>onOpen(u)} />
+        ))}
+      </div>
+
+      <h3 className="mt-8 font-display text-xl text-gray-800">Featured Verified Profiles</h3>
+      <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4 mt-4">
+        {users.filter(u=>u.verifications?.cnic && u.id!==user.id).slice(0,3).map(u=>(
+          <ProfileCard key={u.id} u={{...u, score:compatibility(user,u)}} onOpen={()=>onOpen(u)} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ActivityItem({icon, text, time}){
+  return (
+    <div className="flex items-center gap-3 py-1.5 border-b border-gray-50 last:border-0">
+      <div className="text-lg">{icon}</div>
+      <div className="flex-1 text-sm">{text}</div>
+      <div className="text-xs text-gray-500">{time}</div>
+    </div>
+  );
+}
+function Stat({label,value}){
+  return (
+    <div className="bg-white/10 border border-white/15 rounded-2xl p-3">
+      <div className="text-xs text-white/70">{label}</div>
+      <div className="font-semibold text-lg">{value}</div>
+    </div>
+  );
+}
+
+/* ---------------- Profile Card ---------------- */
+function ProfileCard({u, onOpen, compact}){
+  return (
+    <div className="bg-white rounded-2xl shadow-card border border-gray-100 overflow-hidden">
+      <div className="p-4 flex items-center gap-3">
+        <Avatar kind={u.gender==="Female"?"female":"male"} blur={u.blurPhoto} size={64}/>
+        <div className="flex-1">
+          <div className="flex items-center gap-2">
+            <div className="font-semibold">{u.name}</div>
+            {u.verifications?.cnic && <span className="chip badge-verified">✓</span>}
+            {u.overseas && <span className="chip bg-blue-50 text-blue-700">✈ Overseas</span>}
+          </div>
+          <div className="text-sm text-gray-600">{u.age} • {u.profession} • {u.city}</div>
+          <div className="text-xs text-gray-500 mt-0.5 font-urdu">{u.nameUr}</div>
+        </div>
+        {u.score!=null && (
+          <div className="text-center">
+            <div className="text-emerald-brand font-bold">{u.score}%</div>
+            <div className="text-[10px] text-gray-500">Compatible</div>
+          </div>
+        )}
+      </div>
+      <div className="px-4 pb-4 flex flex-wrap gap-1.5">
+        <span className="chip bg-emerald-50 text-emerald-700">Trust {u.trustScore}</span>
+        {u.verifications?.family && <span className="chip bg-amber-50 text-amber-700">👨‍👩‍👧 Family</span>}
+        {u.verifications?.business && <span className="chip bg-violet-50 text-violet-700">💼 Business</span>}
+        <span className="chip bg-gray-100 text-gray-700">{u.timeline}</span>
+      </div>
+      <div className="px-4 pb-4 flex gap-2">
+        <button onClick={onOpen} className="btn-primary flex-1 py-2 rounded-xl text-sm font-semibold">View Profile</button>
+        <a href={"https://wa.me/"+((u.phone||"").replace(/[^0-9]/g,""))} target="_blank" onClick={e=>e.stopPropagation()} className="px-3 py-2 rounded-xl bg-green-500 text-white text-sm font-semibold" title="WhatsApp">💬</a>
+        <button className="px-3 py-2 rounded-xl border text-sm font-semibold" title="Save">💚</button>
+      </div>
+    </div>
+  );
+}
+
+/* ---------------- Search ---------------- */
+function SearchView({user, users, onOpen}){
+  // Restore last filters from localStorage
+  const saved = (()=>{ try { return JSON.parse(localStorage.getItem("rishta_filters")||"null"); } catch { return null; } })();
+  const [q, setQ] = useState(saved?.q || "");
+  const [f, setF] = useState(saved?.f || { minAge:20, maxAge:40, city:"", country:"", profession:"", sect:"", verified:false, overseas:false, marital:"" });
+  const [savedViews, setSavedViews] = useState(()=>{ try{ return JSON.parse(localStorage.getItem("rishta_saved_views")||"[]"); } catch { return []; } });
+  const [showSaveDialog, setShowSaveDialog] = useState(false);
+  const [viewName, setViewName] = useState("");
+
+  // Persist every change
+  useEffect(()=>{
+    try { localStorage.setItem("rishta_filters", JSON.stringify({ q, f })); } catch(e){}
+  },[q, f]);
+
+  const saveView = ()=>{
+    if(!viewName.trim()) { alert("Give this view a name"); return; }
+    const v = { id: Date.now(), name: viewName.trim(), q, f };
+    const next = [...savedViews, v];
+    setSavedViews(next);
+    localStorage.setItem("rishta_saved_views", JSON.stringify(next));
+    setShowSaveDialog(false); setViewName("");
+  };
+  const loadView = (v)=>{ setQ(v.q); setF(v.f); };
+  const deleteView = (id)=>{
+    const next = savedViews.filter(v=>v.id!==id);
+    setSavedViews(next);
+    localStorage.setItem("rishta_saved_views", JSON.stringify(next));
+  };
+  const clearAll = ()=>{
+    setQ(""); setF({ minAge:20, maxAge:40, city:"", country:"", profession:"", sect:"", verified:false, overseas:false, marital:"" });
+  };
+  const filtered = users.filter(u=>{
+    if(u.id===user.id || u.gender===user.gender) return false;
+    if(q && !(u.name+u.city+u.profession+u.qualification).toLowerCase().includes(q.toLowerCase())) return false;
+    if(u.age < f.minAge || u.age > f.maxAge) return false;
+    if(f.city && u.city!==f.city) return false;
+    if(f.country && u.country!==f.country) return false;
+    if(f.profession && u.profession!==f.profession) return false;
+    if(f.sect && u.sect!==f.sect) return false;
+    if(f.verified && !u.verifications?.cnic) return false;
+    if(f.overseas && !u.overseas) return false;
+    if(f.marital && u.maritalStatus!==f.marital) return false;
+    return true;
+  }).map(u=>({...u, score:compatibility(user,u)})).sort((a,b)=>b.score-a.score);
+
+  return (
+    <div className="max-w-6xl mx-auto p-5 pb-24">
+      {/* Saved Views (Smart Filters) */}
+      {savedViews.length>0 && (
+        <div className="bg-white rounded-2xl shadow-card p-3 mb-3">
+          <div className="text-xs font-semibold text-gray-500 mb-2">💾 Saved Filter Views</div>
+          <div className="flex flex-wrap gap-2">
+            {savedViews.map(v=>(
+              <div key={v.id} className="flex items-center gap-1 bg-emerald-50 border border-emerald-200 rounded-full pl-3 pr-1 py-1">
+                <button onClick={()=>loadView(v)} className="text-sm font-medium text-emerald-700">{v.name}</button>
+                <button onClick={()=>deleteView(v.id)} className="text-emerald-700 hover:text-red-600 w-5 h-5 rounded-full hover:bg-red-50 text-xs">✕</button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+      <div className="bg-white rounded-2xl shadow-card p-4">
+        <div className="flex items-center gap-2">
+          <input value={q} onChange={e=>setQ(e.target.value)} placeholder="Search name, city, profession…" className="inp flex-1"/>
+          <button onClick={()=>setShowSaveDialog(true)} className="px-3 py-2 rounded-xl border text-sm whitespace-nowrap" title="Save current filters as a view">💾 Save View</button>
+          <button onClick={clearAll} className="px-3 py-2 rounded-xl border text-sm whitespace-nowrap">Clear</button>
+        </div>
+        {showSaveDialog && (
+          <div className="mt-3 p-3 bg-emerald-50 rounded-xl border border-emerald-200">
+            <div className="text-sm font-semibold mb-2">Save these filters as a smart view:</div>
+            <div className="flex gap-2">
+              <input value={viewName} onChange={e=>setViewName(e.target.value)} placeholder="e.g. Lahore Doctors 25-30" className="inp flex-1" autoFocus/>
+              <button onClick={saveView} className="btn-primary px-4 py-2 rounded-xl text-sm">Save</button>
+              <button onClick={()=>setShowSaveDialog(false)} className="px-4 py-2 rounded-xl border text-sm">Cancel</button>
+            </div>
+          </div>
+        )}
+        <div className="grid md:grid-cols-4 gap-3 mt-3">
+          <Field label="Min Age"><input type="number" className="inp" value={f.minAge} onChange={e=>setF({...f, minAge:+e.target.value})}/></Field>
+          <Field label="Max Age"><input type="number" className="inp" value={f.maxAge} onChange={e=>setF({...f, maxAge:+e.target.value})}/></Field>
+          <Field label="City"><select className="inp" value={f.city} onChange={e=>setF({...f, city:e.target.value})}><option value="">Any</option>{cities.map(c=><option key={c}>{c}</option>)}</select></Field>
+          <Field label="Country"><select className="inp" value={f.country} onChange={e=>setF({...f, country:e.target.value})}><option value="">Any</option>{countries.map(c=><option key={c}>{c}</option>)}</select></Field>
+          <Field label="Profession"><select className="inp" value={f.profession} onChange={e=>setF({...f, profession:e.target.value})}><option value="">Any</option>{professions.map(c=><option key={c}>{c}</option>)}</select></Field>
+          <Field label="Sect"><select className="inp" value={f.sect} onChange={e=>setF({...f, sect:e.target.value})}><option value="">Any</option>{sects.map(c=><option key={c}>{c}</option>)}</select></Field>
+          <Field label="Marital"><select className="inp" value={f.marital} onChange={e=>setF({...f, marital:e.target.value})}><option value="">Any</option>{maritalStatuses.map(c=><option key={c}>{c}</option>)}</select></Field>
+          <div className="flex items-end gap-3">
+            <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={f.verified} onChange={e=>setF({...f, verified:e.target.checked})}/> Verified Only</label>
+            <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={f.overseas} onChange={e=>setF({...f, overseas:e.target.checked})}/> Overseas</label>
+          </div>
+        </div>
+      </div>
+      <div className="mt-4 text-sm text-gray-600">{filtered.length} results / نتائج</div>
+      <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4 mt-2">
+        {filtered.map(u=> <ProfileCard key={u.id} u={u} onOpen={()=>onOpen(u)}/>)}
+        {filtered.length===0 && <div className="text-gray-500 italic">No matches. Try adjusting filters.</div>}
+      </div>
+    </div>
+  );
+}
+
+/* ---------------- Matches ---------------- */
+function Matches({user, users, onOpen}){
+  const list = users.filter(u=>u.id!==user.id && u.gender!==user.gender)
+    .map(u=>({...u, score:compatibility(user,u)}))
+    .sort((a,b)=>b.score-a.score);
+  return (
+    <div className="max-w-6xl mx-auto p-5 pb-24">
+      <h2 className="font-display text-2xl text-emerald-brand">Your Matches</h2>
+      <p className="font-urdu text-gray-500">آپ کے میچز</p>
+      <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4 mt-4">
+        {list.map(u=> <ProfileCard key={u.id} u={u} onOpen={()=>onOpen(u)}/>)}
+      </div>
+    </div>
+  );
+}
+
+/* ---------------- Profile Detail ---------------- */
+function ProfileDetail({u, user, onClose, onChat, onInterest}){
+  return (
+    <div className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm flex items-end md:items-center justify-center">
+      <div className="bg-white w-full md:max-w-3xl md:rounded-3xl rounded-t-3xl max-h-[92vh] overflow-y-auto fade-in">
+        <div className="sticky top-0 bg-white border-b px-5 py-3 flex items-center justify-between">
+          <div className="font-semibold">{u.name} <span className="font-urdu text-gray-500 text-sm">{u.nameUr}</span></div>
+          <button onClick={onClose} className="text-gray-500">✕</button>
+        </div>
+        <div className="p-5">
+          <div className="flex items-start gap-4">
+            <Avatar kind={u.gender==="Female"?"female":"male"} blur={u.blurPhoto} size={110}/>
+            <div className="flex-1">
+              <div className="text-xl font-display">{u.name}</div>
+              <div className="text-gray-600 text-sm">{u.age} yrs • {u.height} • {u.maritalStatus}</div>
+              <div className="text-gray-600 text-sm">{u.city}, {u.country} • {u.profession}</div>
+              <div className="mt-2 flex flex-wrap gap-1">
+                {u.verifications?.cnic && <span className="chip badge-verified">✓ CNIC</span>}
+                {u.verifications?.face && <span className="chip badge-verified">😊 Face</span>}
+                {u.verifications?.family && <span className="chip bg-amber-100 text-amber-800">👨‍👩‍👧 Family</span>}
+                {u.verifications?.business && <span className="chip bg-violet-100 text-violet-800">💼 Business</span>}
+                {u.overseas && <span className="chip bg-blue-100 text-blue-800">✈ Overseas</span>}
+              </div>
+            </div>
+            <div className="text-center">
+              <CompatRing score={compatibility(user,u)}/>
+              <div className="text-xs text-gray-500 mt-1">Trust {u.trustScore}</div>
+            </div>
+          </div>
+
+          <p className="mt-4 text-gray-700">{u.bio}</p>
+
+          <Section title="Personal" items={[
+            ["Religion / Sect", `${u.religion} • ${u.sect}`],
+            ["Languages", (u.languages||[]).join(", ")],
+            ["Nationality", u.nationality],
+            ["Timeline", u.timeline]
+          ]}/>
+          <Section title="Education & Career" items={[
+            ["Qualification", `${u.qualification} (${u.university||"-"})`],
+            ["Profession", `${u.profession} at ${u.company}`],
+            ["Business", u.business],
+            ["Income", u.income],
+            ["Job Type", u.jobType]
+          ]}/>
+          <Section title="Family" items={[
+            ["Father", u.fatherProfession],
+            ["Mother", u.motherProfession],
+            ["Siblings", u.siblings],
+            ["Family Type", u.familyType],
+            ["Own House", u.ownHouse?"Yes":"No"],
+            ["Background", u.familyBackground]
+          ]}/>
+          <Section title="Religion" items={[
+            ["Namaz", u.namaz],
+            ["Hijab", u.hijab||"-"],
+            ["Religious Level", u.religiousLevel]
+          ]}/>
+          <Section title="Personality" items={[
+            ["Nature", u.nature],
+            ["Hobbies", (u.hobbies||[]).join(", ")],
+            ["Smoking", u.smoking],
+            ["Future Goals", u.futureGoals]
+          ]}/>
+          <Section title="Partner Preferences" items={[
+            ["Age", u.preferences?.ageRange],
+            ["City", u.preferences?.city],
+            ["Education", u.preferences?.education],
+            ["Religious", u.preferences?.religious],
+            ["Family Type", u.preferences?.familyType]
+          ]}/>
+
+          {/* First 10 proposals → full premium features even for free users */}
+          {(() => {
+            const viewed = JSON.parse(localStorage.getItem("rishta_viewed_profiles")||"[]");
+            const isPremiumPreview = viewed.length <= 10 || user.plan !== "Free";
+            const phone = u.phone || "+92-3XX-XXXXXXX";
+            const whatsappLink = "https://wa.me/" + (u.phone||"").replace(/[^0-9]/g,"");
+            return (
+              <>
+                {isPremiumPreview ? (
+                  <div className="mt-4 rounded-2xl bg-emerald-50 border border-emerald-200 p-3 text-sm">
+                    <div className="font-semibold text-emerald-800">🎁 Premium Preview Unlocked!</div>
+                    <div className="text-emerald-700 mt-1">
+                      {user.plan === "Free" ? `You're seeing all features free for your first 10 proposals (${10 - viewed.length} remaining).` : "All Premium features unlocked."}
+                    </div>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      <a href={"tel:"+phone} className="chip bg-white border border-emerald-200">📞 {phone}</a>
+                      <a href={whatsappLink} target="_blank" className="chip bg-green-500 text-white">💬 WhatsApp</a>
+                      <a href={"mailto:"+(u.email||"contact@rishta.com")} className="chip bg-white border border-emerald-200">📧 Email</a>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="mt-4 rounded-2xl bg-amber-50 border border-amber-200 p-3 text-sm text-amber-900 flex items-center justify-between">
+                    <div>
+                      🔒 Phone number hidden. You've used your 10 free previews. Upgrade to Premium to unlock.
+                    </div>
+                    <button onClick={()=>{ onClose(); setTimeout(()=>location.hash="#subscription", 100); }} className="btn-gold px-3 py-1.5 rounded-lg text-xs font-semibold">Upgrade</button>
+                  </div>
+                )}
+              </>
+            );
+          })()}
+
+          <div className="mt-5 flex flex-col md:flex-row gap-3">
+            <button onClick={onInterest} className="btn-primary flex-1 py-3 rounded-xl font-semibold">💚 Send Interest</button>
+            <button onClick={onChat} className="btn-gold flex-1 py-3 rounded-xl font-semibold">💬 Message</button>
+            <a href={"https://wa.me/"+(u.phone||"").replace(/[^0-9]/g,"")} target="_blank" className="px-4 py-3 rounded-xl bg-green-500 text-white font-semibold text-center">WhatsApp</a>
+            <button className="px-4 py-3 rounded-xl border font-semibold">📅 Meeting</button>
+            <button className="px-4 py-3 rounded-xl border text-red-600 font-semibold">⚠ Report</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+function Section({title, items}){
+  return (
+    <div className="mt-4 bg-cream rounded-2xl p-4">
+      <div className="font-semibold text-emerald-brand">{title}</div>
+      <div className="grid md:grid-cols-2 gap-x-6 gap-y-1.5 mt-2 text-sm">
+        {items.filter(([_,v])=>v).map(([k,v])=>(
+          <div key={k}><span className="text-gray-500">{k}:</span> <span className="text-gray-800">{v}</span></div>
+        ))}
+      </div>
+    </div>
+  );
+}
+function CompatRing({score}){
+  const r=24, c=2*Math.PI*r;
+  return (
+    <svg width="64" height="64" className="block">
+      <circle cx="32" cy="32" r={r} stroke="#e5e7eb" strokeWidth="6" fill="none"/>
+      <circle cx="32" cy="32" r={r} stroke="#0f766e" strokeWidth="6" fill="none"
+        strokeDasharray={c} strokeDashoffset={c-(score/100)*c} className="compat-ring" strokeLinecap="round"/>
+      <text x="32" y="36" textAnchor="middle" fontSize="14" fontWeight="700" fill="#0f766e">{score}%</text>
+    </svg>
+  );
+}
+
+/* ---------------- Chat ---------------- */
+function ChatView({user, users, messages, sendMessage}){
+  const others = users.filter(u=> u.id!==user.id && u.gender!==user.gender);
+  const [activeId, setActiveId] = useState(others[0]?.id);
+  const active = users.find(u=>u.id===activeId);
+  const key = [user.id, activeId].sort().join("-");
+  const thread = messages[key]||[];
+  const [text, setText] = useState("");
+  const scrollRef = useRef(null);
+  useEffect(()=>{ scrollRef.current?.scrollTo(0,99999); },[thread.length, activeId]);
+
+  return (
+    <div className="max-w-6xl mx-auto p-5 pb-24">
+      <div className="bg-white rounded-2xl shadow-card overflow-hidden grid md:grid-cols-[280px,1fr] min-h-[560px]">
+        <div className="border-r border-gray-100 overflow-y-auto">
+          <div className="p-3 font-semibold border-b">Conversations</div>
+          {others.map(u=>(
+            <button key={u.id} onClick={()=>setActiveId(u.id)} className={"w-full flex items-center gap-3 px-3 py-2 hover:bg-gray-50 "+(activeId===u.id?"bg-emerald-50":"")}>
+              <Avatar kind={u.gender==="Female"?"female":"male"} blur={u.blurPhoto} size={40}/>
+              <div className="text-left flex-1">
+                <div className="font-semibold text-sm">{u.name}</div>
+                <div className="text-xs text-gray-500">{u.city} • {u.profession}</div>
+              </div>
+            </button>
+          ))}
+        </div>
+        <div className="flex flex-col">
+          {active ? (
+            <>
+              <div className="p-3 border-b flex items-center gap-3">
+                <Avatar kind={active.gender==="Female"?"female":"male"} blur={active.blurPhoto} size={40}/>
+                <div>
+                  <div className="font-semibold">{active.name}</div>
+                  <div className="text-xs text-emerald-700">● Encrypted • last seen {active.lastActive}</div>
+                </div>
+                <div className="ml-auto flex gap-2">
+                  <button className="px-3 py-1.5 rounded-lg border text-sm">📞</button>
+                  <button className="px-3 py-1.5 rounded-lg border text-sm">🎥</button>
+                </div>
+              </div>
+              <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-2 bg-cream">
+                {thread.length===0 && <div className="text-center text-sm text-gray-500">Start the conversation respectfully. Assalamu Alaikum 🌙</div>}
+                {thread.map((m,i)=>(
+                  <div key={i} className={"flex "+(m.from===user.id?"justify-end":"justify-start")}>
+                    <div className={"max-w-[75%] rounded-2xl px-3 py-2 text-sm "+(m.from===user.id?"bg-emerald-brand text-white":"bg-white border")}>
+                      {m.text}
+                      <div className={"text-[10px] mt-0.5 "+(m.from===user.id?"text-white/70":"text-gray-400")}>{m.time}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="p-3 border-t flex items-center gap-2">
+                <button className="px-2 py-2 rounded-lg border">🎙️</button>
+                <button className="px-2 py-2 rounded-lg border">📎</button>
+                <input value={text} onChange={e=>setText(e.target.value)} placeholder="Type a respectful message…" className="inp flex-1"
+                  onKeyDown={e=>{ if(e.key==="Enter" && text.trim()){ sendMessage(activeId, text); setText(""); }}}
+                />
+                <button onClick={()=>{ if(text.trim()){ sendMessage(activeId, text); setText(""); }}} className="btn-primary px-4 py-2 rounded-lg">Send</button>
+              </div>
+            </>
+          ) : <div className="p-10 text-center text-gray-500">No conversations yet.</div>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ---------------- Verification ---------------- */
+function VerificationView({user, setUser}){
+  const v = user.verifications||{};
+  const update = (k)=> setUser({...user, verifications:{...v, [k]:true}, trustScore: Math.min(100,(user.trustScore||60)+(k==="cnic"||k==="face"?20:k==="family"?15:5))});
+  const items = [
+    { k:"phone", t:"Phone Verification", d:"OTP sent to your phone number", score:"+5", icon:"📱"},
+    { k:"email", t:"Email Verification", d:"Confirm your email address", score:"+5", icon:"📧"},
+    { k:"cnic", t:"CNIC Verification", d:"Upload front & back of CNIC for verification", score:"+20", icon:"🪪"},
+    { k:"face", t:"Face Verification", d:"AI live selfie match with CNIC photo", score:"+20", icon:"😊"},
+    { k:"family", t:"Family Verification", d:"Parent/Guardian approval call by team", score:"+15", icon:"👨‍👩‍👧"},
+    { k:"business", t:"Business Verification", d:"Upload business documents (optional)", score:"+10", icon:"💼"},
+  ];
+  return (
+    <div className="max-w-3xl mx-auto p-5 pb-24">
+      <div className="bg-white rounded-2xl shadow-card p-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="font-display text-2xl text-emerald-brand">Verification Center</h2>
+            <p className="font-urdu text-gray-500">تصدیق سینٹر</p>
+          </div>
+          <div className="text-center">
+            <CompatRing score={user.trustScore||60}/>
+            <div className="text-xs text-gray-500 mt-1">Trust Score</div>
+          </div>
+        </div>
+        <div className="mt-4 space-y-3">
+          {items.map(it=>(
+            <div key={it.k} className="flex items-center justify-between p-3 rounded-xl border">
+              <div className="flex items-center gap-3">
+                <div className="text-2xl">{it.icon}</div>
+                <div>
+                  <div className="font-semibold">{it.t}</div>
+                  <div className="text-xs text-gray-500">{it.d}</div>
+                </div>
+              </div>
+              <div>
+                {v[it.k] ? (
+                  <span className="chip badge-verified">✓ Verified</span>
+                ) : (
+                  <button onClick={()=>update(it.k)} className="btn-primary px-3 py-1.5 rounded-lg text-sm">Verify {it.score}</button>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+        <div className="mt-4 rounded-2xl bg-emerald-50 border border-emerald-200 p-3 text-sm">
+          <b>🤖 AI Fraud Detection enabled:</b> duplicate CNIC, face on multiple accounts, multi-account devices, fake images and spam behaviour are auto-flagged.
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ---------------- Subscription ---------------- */
+function Subscription({user, setUser}){
+  const [selectedPlan, setSelectedPlan] = useState(null);
+  const [paymentSent, setPaymentSent] = useState(false);
+  const [txnId, setTxnId] = useState("");
+
+  const plans = [
+    { n:"Free", urdu:"مفت", price:"PKR 0", priceNum:0, color:"bg-gray-50",
+      features:["First 10 proposals (full premium preview)", "Limited chat", "Blurred images", "Basic filters", "WhatsApp button visible"]},
+    { n:"Premium", urdu:"پریمیم", price:"PKR 2,499 / mo", priceNum:2499, color:"bg-emerald-50", highlight:true,
+      features:["Unlimited proposals","Unlimited chat","View phone numbers","WhatsApp direct access","Advanced filters","Save filter views","Profile boost"]},
+    { n:"VIP", urdu:"وی آئی پی", price:"PKR 12,999 / mo", priceNum:12999, color:"bg-amber-50",
+      features:["Dedicated matchmaker","Family meeting arrangements","Background verification","Priority support","All Premium features"]}
+  ];
+
+  const submitPayment = ()=>{
+    if(!txnId.trim()){ alert("Please enter your transaction reference / TID"); return; }
+    setPaymentSent(true);
+    // In real app: POST to backend for admin verification
+    api("/api/subscribe", { method:"POST", body:{ plan:selectedPlan.n, txnId, method:"bank" }}).catch(()=>{});
+  };
+
+  return (
+    <div className="max-w-6xl mx-auto p-5 pb-24">
+      <h2 className="font-display text-2xl text-emerald-brand">Choose Your Plan</h2>
+      <p className="font-urdu text-gray-500">اپنا پلان منتخب کریں</p>
+      <div className="grid md:grid-cols-3 gap-4 mt-4">
+        {plans.map(p=>(
+          <div key={p.n} className={"rounded-3xl p-6 border-2 "+(p.highlight?"border-emerald-brand shadow-soft":"border-gray-100")+" "+p.color}>
+            <div className="font-display text-2xl">{p.n}</div>
+            <div className="font-urdu text-gray-500">{p.urdu}</div>
+            <div className="mt-2 text-2xl font-bold">{p.price}</div>
+            <ul className="mt-3 space-y-1.5 text-sm">
+              {p.features.map(f=> <li key={f}>✓ {f}</li>)}
+            </ul>
+            <button
+              onClick={()=> p.priceNum===0 ? setUser({...user, plan:p.n}) : setSelectedPlan(p)}
+              className={"mt-4 w-full py-2.5 rounded-xl font-semibold "+(p.highlight?"btn-primary":"border")}>
+              {user.plan===p.n ? "Current Plan" : (p.priceNum===0 ? "Activate Free" : "Upgrade Now")}
+            </button>
+          </div>
+        ))}
+      </div>
+
+      {/* Payment Modal */}
+      {selectedPlan && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white max-w-2xl w-full rounded-3xl max-h-[92vh] overflow-y-auto">
+            <div className="sticky top-0 bg-white border-b px-5 py-3 flex items-center justify-between">
+              <div className="font-display text-xl">Complete Payment — {selectedPlan.n} Plan</div>
+              <button onClick={()=>{ setSelectedPlan(null); setPaymentSent(false); setTxnId(""); }} className="text-gray-500">✕</button>
+            </div>
+            <div className="p-5">
+              {paymentSent ? (
+                <div className="text-center py-10">
+                  <div className="text-6xl">✅</div>
+                  <div className="font-display text-2xl mt-3">Payment Submitted!</div>
+                  <div className="text-gray-600 mt-2 max-w-md mx-auto">
+                    JazakAllah! Aap ka payment confirmation team review kar rahi hai. 1-2 hours mein aap ka plan activate ho jayega.
+                  </div>
+                  <button onClick={()=>{ setSelectedPlan(null); setPaymentSent(false); setTxnId(""); }} className="mt-5 btn-primary px-5 py-2 rounded-xl">Close</button>
+                </div>
+              ) : (
+                <>
+                  <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-4 mb-4">
+                    <div className="text-sm text-emerald-800 font-semibold">Plan: {selectedPlan.n}</div>
+                    <div className="text-2xl font-bold text-emerald-900">{selectedPlan.price}</div>
+                  </div>
+
+                  {/* Bank Transfer (Primary) */}
+                  <div className="border-2 border-emerald-brand rounded-2xl p-5">
+                    <div className="flex items-center justify-between">
+                      <div className="font-semibold text-lg">🏦 Bank Transfer</div>
+                      <span className="chip badge-verified">Recommended</span>
+                    </div>
+                    <div className="mt-3 space-y-2 text-sm bg-cream rounded-xl p-4">
+                      <div className="flex justify-between border-b pb-2"><span className="text-gray-600">Account Title:</span><span className="font-semibold">RishtaConnect Pvt Ltd</span></div>
+                      <div className="flex justify-between border-b pb-2"><span className="text-gray-600">Bank Name:</span><span className="font-semibold">Meezan Bank Limited</span></div>
+                      <div className="flex justify-between border-b pb-2"><span className="text-gray-600">Account Number:</span>
+                        <span className="font-mono font-semibold flex items-center gap-2">
+                          0123-4567-8901-2345
+                          <button onClick={()=>{navigator.clipboard.writeText("0123456789012345"); alert("Account number copied!");}} className="text-emerald-brand text-xs">📋 Copy</button>
+                        </span>
+                      </div>
+                      <div className="flex justify-between border-b pb-2"><span className="text-gray-600">IBAN:</span><span className="font-mono font-semibold">PK36MEZN0001230456789012</span></div>
+                      <div className="flex justify-between"><span className="text-gray-600">Branch:</span><span className="font-semibold">Lahore Main Branch</span></div>
+                    </div>
+                    <div className="mt-3 text-xs text-gray-600">
+                      📌 Send <b>{selectedPlan.price}</b> to the above account via online banking, ATM, or branch transfer. Reference: <b>{user.email}</b>
+                    </div>
+                  </div>
+
+                  {/* JazzCash */}
+                  <div className="border rounded-2xl p-5 mt-3">
+                    <div className="flex items-center justify-between">
+                      <div className="font-semibold text-lg">📱 JazzCash</div>
+                      <span className="chip bg-orange-100 text-orange-700">Available</span>
+                    </div>
+                    <div className="mt-3 space-y-2 text-sm bg-orange-50 rounded-xl p-4">
+                      <div className="flex justify-between border-b pb-2"><span className="text-gray-600">JazzCash Number:</span>
+                        <span className="font-mono font-semibold flex items-center gap-2">
+                          0300-1234567
+                          <button onClick={()=>{navigator.clipboard.writeText("03001234567"); alert("Number copied!");}} className="text-orange-700 text-xs">📋 Copy</button>
+                        </span>
+                      </div>
+                      <div className="flex justify-between"><span className="text-gray-600">Account Title:</span><span className="font-semibold">RishtaConnect Admin</span></div>
+                    </div>
+                    <div className="mt-3 text-xs text-gray-600">
+                      📌 JazzCash mobile app → "Send Money" → above number par <b>{selectedPlan.price}</b> bhejein.
+                    </div>
+                  </div>
+
+                  {/* Coming Soon Methods */}
+                  <div className="mt-3 grid grid-cols-2 md:grid-cols-4 gap-2">
+                    {["Easypaisa","Stripe","PayPal","Apple Pay","Google Pay","UBL Omni","HBL Konnect","Crypto"].map(m=>(
+                      <div key={m} className="border rounded-xl p-3 text-center bg-gray-50 opacity-60">
+                        <div className="text-sm font-medium">{m}</div>
+                        <div className="text-[10px] text-gray-500 mt-1">Coming Soon</div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Submit transaction proof */}
+                  <div className="mt-5 border-t pt-4">
+                    <div className="font-semibold mb-2">After payment, enter transaction reference:</div>
+                    <input value={txnId} onChange={e=>setTxnId(e.target.value)} placeholder="e.g. TXN12345678 / Trans ID / Reference Number" className="inp"/>
+                    <button onClick={submitPayment} className="btn-primary w-full mt-3 py-3 rounded-xl font-semibold">Submit Payment Confirmation</button>
+                    <div className="text-xs text-gray-500 mt-2 text-center">Admin team will verify and activate your plan within 1-2 hours.</div>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ---------------- My Profile ---------------- */
+function MyProfile({user, setUser, onLogout, onEdit, onNav}){
+  const pendingEdit = JSON.parse(localStorage.getItem("rishta_pending_edit_"+user.id)||"null");
+  const editHistory = JSON.parse(localStorage.getItem("rishta_edit_history_"+user.id)||"[]");
+  return (
+    <div className="max-w-3xl mx-auto p-5 pb-24">
+      {pendingEdit && (
+        <div className="mb-4 bg-amber-50 border-2 border-amber-300 rounded-2xl p-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="font-semibold text-amber-900">⏳ Pending Admin Review</div>
+              <div className="text-sm text-amber-800 mt-1">
+                Your profile changes are being reviewed. You cannot make new edits until approved or rejected.
+              </div>
+              <div className="text-xs text-amber-700 mt-2">
+                Fields changed: {Object.keys(pendingEdit.changes||{}).join(", ")} • Submitted {new Date(pendingEdit.time).toLocaleString()}
+              </div>
+            </div>
+            <span className="chip bg-amber-200 text-amber-900">Review</span>
+          </div>
+        </div>
+      )}
+      <div className="bg-white rounded-3xl shadow-card overflow-hidden">
+        <div className="gradient-hero p-6 text-white relative">
+          <div className="flex items-center gap-4">
+            <Avatar kind={user.gender==="Female"?"female":"male"} size={92}/>
+            <div>
+              <div className="font-display text-2xl">{user.name||"Your Name"}</div>
+              <div className="text-white/80 text-sm">{user.age||"-"} • {user.city||"-"} • {user.profession||"-"}</div>
+              <div className="mt-1 flex gap-1">
+                {user.verifications?.cnic && <span className="chip badge-verified">✓ Verified</span>}
+                <span className="chip badge-vip">{user.plan||"Free"}</span>
+                {pendingEdit && <span className="chip bg-amber-200 text-amber-900">⏳ Pending Review</span>}
+              </div>
+            </div>
+          </div>
+        </div>
+        <div className="p-5 grid md:grid-cols-3 gap-3">
+          <ActionTile icon="✏️" t={pendingEdit?"Edit Locked":"Edit Biodata"} onClick={()=> pendingEdit ? alert("Your previous edit is still pending admin review. Please wait for approval before making new changes.") : onEdit()}/>
+          <ActionTile icon="🛡️" t="Verification" onClick={()=>onNav("verify")}/>
+          <ActionTile icon="💳" t="Subscription" onClick={()=>onNav("subscription")}/>
+          <ActionTile icon="👨‍👩‍👧" t="Family Dashboard" onClick={()=>onNav("family")}/>
+          <ActionTile icon="💎" t="Hire Matchmaker" onClick={()=>onNav("matchmakers")}/>
+          <ActionTile icon="📅" t="My Meetings" onClick={()=>onNav("meetings")}/>
+          {(user.role === "matchmaker" || user.role === "admin") && <ActionTile icon="📊" t="Matchmaker CRM" onClick={()=>onNav("matchmakerDashboard")}/>}
+          <ActionTile icon="🔔" t="Notifications" onClick={()=>onNav("notifications")}/>
+          <ActionTile icon="📋" t={"Edit History ("+editHistory.length+")"} onClick={()=>onNav("editHistory")}/>
+          {user.role === "admin" && <ActionTile icon="🛠️" t="Admin Panel" onClick={()=>onNav("admin")}/>}
+        </div>
+        <div className="px-5 pb-5">
+          <button onClick={onLogout} className="w-full py-2.5 rounded-xl border text-red-600 font-semibold">Logout</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+function ActionTile({icon, t, onClick}){
+  return (
+    <button onClick={onClick} className="text-left rounded-2xl p-4 border hover:bg-cream">
+      <div className="text-2xl">{icon}</div>
+      <div className="font-semibold mt-1">{t}</div>
+    </button>
+  );
+}
+
+/* ---------------- Family Dashboard ---------------- */
+function Family({user}){
+  return (
+    <div className="max-w-3xl mx-auto p-5 pb-24">
+      <div className="bg-white rounded-2xl shadow-card p-6">
+        <h2 className="font-display text-2xl text-emerald-brand">Family Dashboard</h2>
+        <p className="font-urdu text-gray-500">خاندانی ڈیش بورڈ</p>
+        <div className="mt-4 grid md:grid-cols-2 gap-3">
+          <div className="rounded-2xl border p-4">
+            <div className="font-semibold">Profile Managed By</div>
+            <div className="text-sm text-gray-600">Self / Mother / Brother / Guardian</div>
+            <select className="inp mt-2"><option>Self</option><option>Mother</option><option>Father</option><option>Brother</option><option>Sister</option><option>Guardian</option></select>
+          </div>
+          <div className="rounded-2xl border p-4">
+            <div className="font-semibold">Family Approval Required</div>
+            <div className="text-sm text-gray-600">All interests require parent approval before chat starts.</div>
+            <label className="mt-2 flex items-center gap-2 text-sm"><input type="checkbox" defaultChecked/> Enabled</label>
+          </div>
+          <div className="rounded-2xl border p-4 md:col-span-2">
+            <div className="font-semibold">Family Meeting Scheduler</div>
+            <div className="text-sm text-gray-600 mt-1">Use Google Meet/Zoom integration once a mutual interest is confirmed.</div>
+            <div className="mt-3 flex gap-2">
+              <input type="date" className="inp"/>
+              <input type="time" className="inp"/>
+              <button className="btn-primary px-4 rounded-xl">Schedule</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ---------------- Matchmakers Marketplace ---------------- */
+const MATCHMAKERS = [
+  {
+    id:"m1", name:"Naseem Aunty", nameUr:"نسیم آنٹی", role:"Elite Matchmaker",
+    photo:"female", city:"Lahore", country:"Pakistan", experience:"22 years",
+    specialization:["Lahore Families","Business Class","Religious Families"],
+    languages:["Urdu","Punjabi","English"], gender:"Female",
+    countries:["Pakistan","UAE","UK","Canada"],
+    bio:"Alhamdulillah, 22 saal ka tajurba. Maine 200+ rishtay karwaye hain. Lahore ke achay khandanon ke saath kaam karti hoon.",
+    rating:4.9, marriages:214, activeClients:120, closedClients:38, responseTime:"< 2 hrs",
+    level:"💎 Elite", verified:true, online:true,
+    packages:[
+      { name:"Free Consultation", price:0, features:["1 video call","Basic guidance","3 profile suggestions"]},
+      { name:"Premium Matchmaking", price:25000, features:["Personalized matching","Family coordination","5 meetings","Profile shortlisting"]},
+      { name:"VIP Full Service", price:150000, features:["Dedicated matchmaker","Background verification","Family meetings","Until nikkah"]}
+    ]
+  },
+  {
+    id:"m2", name:"Dr. Ahmad Raza", nameUr:"ڈاکٹر احمد رضا", role:"Royal Consultant",
+    photo:"male", city:"Karachi", country:"Pakistan", experience:"18 years",
+    specialization:["Doctor Families","Overseas Pakistanis","Educated Class"],
+    languages:["Urdu","English"], gender:"Male",
+    countries:["Pakistan","USA","UK","Saudi Arabia"],
+    bio:"Marriage counselor and rishta consultant. Specialized in matches for doctors, engineers and overseas families.",
+    rating:4.8, marriages:189, activeClients:95, closedClients:42, responseTime:"< 4 hrs",
+    level:"👑 Royal", verified:true, online:false,
+    packages:[
+      { name:"Free Consultation", price:0, features:["1 video call","Initial assessment"]},
+      { name:"Premium Matchmaking", price:35000, features:["7 profiles","Family meetings","Compatibility analysis"]},
+      { name:"VIP Full Service", price:200000, features:["Full handling","Background checks","Lawyer consultation","Wedding planning"]}
+    ]
+  },
+  {
+    id:"m3", name:"Fatima Khan", nameUr:"فاطمہ خان", role:"Gold Matchmaker",
+    photo:"female", city:"Islamabad", country:"Pakistan", experience:"12 years",
+    specialization:["Islamabad/Rawalpindi","Govt Families","Educated Singles"],
+    languages:["Urdu","English"], gender:"Female",
+    countries:["Pakistan","UAE","Canada"],
+    bio:"Modern matchmaker focused on educated, professional families. Active on multiple platforms.",
+    rating:4.7, marriages:98, activeClients:65, closedClients:24, responseTime:"< 6 hrs",
+    level:"🥇 Gold", verified:true, online:true,
+    packages:[
+      { name:"Free Consultation", price:0, features:["WhatsApp consultation"]},
+      { name:"Premium Matchmaking", price:18000, features:["5 profiles","Family calls","Meeting setup"]},
+      { name:"VIP Full Service", price:100000, features:["Dedicated handling","Multiple cities"]}
+    ]
+  },
+  {
+    id:"m4", name:"Hajra Begum", nameUr:"حاجرہ بیگم", role:"Silver Matchmaker",
+    photo:"female", city:"Dubai", country:"UAE", experience:"9 years",
+    specialization:["Overseas Pakistanis","Gulf-based","Visa-aware matches"],
+    languages:["Urdu","English","Arabic"], gender:"Female",
+    countries:["UAE","Saudi Arabia","Qatar","Pakistan"],
+    bio:"Helping overseas Pakistani families find suitable matches with visa & relocation guidance.",
+    rating:4.6, marriages:62, activeClients:40, closedClients:15, responseTime:"< 12 hrs",
+    level:"🥈 Silver", verified:true, online:true,
+    packages:[
+      { name:"Free Consultation", price:0, features:["Phone call"]},
+      { name:"Premium Matchmaking", price:14000, features:["Overseas matches","Family coordination"]},
+      { name:"VIP Full Service", price:80000, features:["Full Gulf-Pakistan handling"]}
+    ]
+  },
+  {
+    id:"m5", name:"Ammar Hussain", nameUr:"عمار حسین", role:"Bronze Matchmaker",
+    photo:"male", city:"Faisalabad", country:"Pakistan", experience:"4 years",
+    specialization:["Faisalabad","Business families","Punjab cities"],
+    languages:["Urdu","Punjabi"], gender:"Male",
+    countries:["Pakistan"],
+    bio:"Upcoming matchmaker with growing network in Punjab cities.",
+    rating:4.4, marriages:24, activeClients:30, closedClients:12, responseTime:"< 24 hrs",
+    level:"🥉 Bronze", verified:true, online:false,
+    packages:[
+      { name:"Free Consultation", price:0, features:["WhatsApp chat"]},
+      { name:"Premium Matchmaking", price:8000, features:["3 profiles","Family intro"]},
+      { name:"VIP Full Service", price:50000, features:["Full handling in Punjab"]}
+    ]
+  }
+];
+
+function MatchmakerCard({m, onOpen}){
+  return (
+    <div className="bg-white rounded-2xl shadow-card border border-gray-100 overflow-hidden hover:-translate-y-1 transition-all">
+      <div className="p-5">
+        <div className="flex items-start gap-3">
+          <div className="relative">
+            <Avatar kind={m.photo} size={64}/>
+            {m.online && <div className="absolute bottom-0 right-0 w-3.5 h-3.5 rounded-full bg-emerald-500 border-2 border-white"/>}
+          </div>
+          <div className="flex-1">
+            <div className="flex items-center gap-2">
+              <div className="font-semibold">{m.name}</div>
+              {m.verified && <span className="chip badge-verified">✓</span>}
+            </div>
+            <div className="text-xs text-gray-500">{m.city}, {m.country} • {m.experience}</div>
+            <div className="mt-1 flex gap-1 flex-wrap">
+              <span className="chip badge-vip">{m.level}</span>
+              <span className="chip bg-emerald-50 text-emerald-700">{m.role}</span>
+            </div>
+          </div>
+        </div>
+        <div className="mt-3 flex items-center justify-between text-sm">
+          <div className="flex items-center gap-1"><span className="text-amber-500">⭐</span><b>{m.rating}</b><span className="text-gray-400 text-xs">({m.marriages} marriages)</span></div>
+          <div className="text-xs text-gray-500">Responds {m.responseTime}</div>
+        </div>
+        <div className="mt-3 grid grid-cols-3 gap-2 text-center text-xs">
+          <div className="bg-emerald-50 rounded-lg p-2"><div className="font-bold text-emerald-700">{m.marriages}</div><div className="text-gray-500">Marriages</div></div>
+          <div className="bg-amber-50 rounded-lg p-2"><div className="font-bold text-amber-700">{m.activeClients}</div><div className="text-gray-500">Active</div></div>
+          <div className="bg-violet-50 rounded-lg p-2"><div className="font-bold text-violet-700">{m.closedClients}</div><div className="text-gray-500">Closed</div></div>
+        </div>
+        <div className="mt-3 text-sm text-gray-700 line-clamp-2">{m.bio}</div>
+        <div className="mt-3 flex flex-wrap gap-1">
+          {m.specialization.slice(0,3).map(s=> <span key={s} className="chip bg-gray-100 text-gray-700">{s}</span>)}
+        </div>
+        <div className="mt-4 flex gap-2">
+          <button onClick={onOpen} className="btn-primary flex-1 py-2 rounded-xl text-sm font-semibold">View & Hire</button>
+          <button className="px-3 py-2 rounded-xl border text-sm">💬</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function MatchmakersMarketplace({user}){
+  const [active, setActive] = useState(null);
+  const [filter, setFilter] = useState({ level:"", city:"", gender:"" });
+  const [bookingPkg, setBookingPkg] = useState(null);
+  const filtered = MATCHMAKERS.filter(m=>{
+    if(filter.level && m.level !== filter.level) return false;
+    if(filter.city && m.city !== filter.city) return false;
+    if(filter.gender && m.gender !== filter.gender) return false;
+    return true;
+  });
+  return (
+    <div className="max-w-6xl mx-auto p-5 pb-24">
+      <div className="rounded-3xl gradient-hero text-white p-6 md:p-8 shadow-soft">
+        <div className="flex items-center justify-between">
+          <div>
+            <span className="chip bg-white/15 border border-white/20">⭐ Verified Professionals</span>
+            <h1 className="font-display text-3xl md:text-4xl mt-2">Hire a Trusted Matchmaker</h1>
+            <p className="font-urdu text-white/90 mt-1">قابلِ اعتماد رشتہ ماہر کرایہ پر لیں</p>
+            <p className="text-white/80 mt-2 max-w-xl">Connect with verified professional matchmakers, consultants and family coordinators. CRM-style tracking, success-based ratings.</p>
+          </div>
+          <div className="hidden md:flex flex-col items-center bg-white/10 rounded-2xl p-3">
+            <div className="text-3xl">🏆</div>
+            <div className="text-xs">{MATCHMAKERS.length} Pro Matchmakers</div>
+          </div>
+        </div>
+        <div className="mt-4 grid md:grid-cols-3 gap-3">
+          <select className="bg-white/10 border border-white/20 rounded-xl px-3 py-2 text-sm" value={filter.level} onChange={e=>setFilter({...filter, level:e.target.value})}>
+            <option value="">All Levels</option>
+            <option>🥉 Bronze</option><option>🥈 Silver</option><option>🥇 Gold</option><option>💎 Elite</option><option>👑 Royal</option>
+          </select>
+          <select className="bg-white/10 border border-white/20 rounded-xl px-3 py-2 text-sm" value={filter.city} onChange={e=>setFilter({...filter, city:e.target.value})}>
+            <option value="">All Cities</option>
+            {[...new Set(MATCHMAKERS.map(m=>m.city))].map(c=> <option key={c}>{c}</option>)}
+          </select>
+          <select className="bg-white/10 border border-white/20 rounded-xl px-3 py-2 text-sm" value={filter.gender} onChange={e=>setFilter({...filter, gender:e.target.value})}>
+            <option value="">Any Gender</option>
+            <option>Male</option><option>Female</option>
+          </select>
+        </div>
+      </div>
+
+      <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4 mt-6">
+        {filtered.map(m=> <MatchmakerCard key={m.id} m={m} onOpen={()=>setActive(m)}/>)}
+      </div>
+
+      {/* Matchmaker Detail Modal */}
+      {active && (
+        <div className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm flex items-end md:items-center justify-center p-0 md:p-5">
+          <div className="bg-white max-w-3xl w-full md:rounded-3xl rounded-t-3xl max-h-[92vh] overflow-y-auto">
+            <div className="sticky top-0 bg-white border-b px-5 py-3 flex items-center justify-between z-10">
+              <div className="font-semibold">{active.name} <span className="text-xs text-gray-500">{active.level}</span></div>
+              <button onClick={()=>setActive(null)} className="text-gray-500">✕</button>
+            </div>
+            <div className="p-5">
+              <div className="flex items-start gap-4">
+                <Avatar kind={active.photo} size={100}/>
+                <div className="flex-1">
+                  <div className="font-display text-2xl">{active.name}</div>
+                  <div className="font-urdu text-gray-500">{active.nameUr}</div>
+                  <div className="text-sm text-gray-600">{active.role} • {active.experience}</div>
+                  <div className="text-sm text-gray-600">{active.city}, {active.country}</div>
+                  <div className="mt-2 flex gap-1 flex-wrap">
+                    <span className="chip badge-vip">{active.level}</span>
+                    {active.verified && <span className="chip badge-verified">✓ Verified</span>}
+                    {active.online && <span className="chip bg-emerald-100 text-emerald-700">● Online</span>}
+                  </div>
+                </div>
+                <div className="text-center">
+                  <div className="text-3xl">⭐</div>
+                  <div className="font-bold text-xl">{active.rating}</div>
+                  <div className="text-xs text-gray-500">{active.marriages} matches</div>
+                </div>
+              </div>
+              <div className="mt-3 grid grid-cols-4 gap-2 text-center text-xs">
+                <div className="bg-emerald-50 rounded-lg p-2"><div className="font-bold text-emerald-700 text-lg">{active.marriages}</div><div className="text-gray-500">Marriages</div></div>
+                <div className="bg-amber-50 rounded-lg p-2"><div className="font-bold text-amber-700 text-lg">{active.activeClients}</div><div className="text-gray-500">Active</div></div>
+                <div className="bg-violet-50 rounded-lg p-2"><div className="font-bold text-violet-700 text-lg">{active.closedClients}</div><div className="text-gray-500">Closed</div></div>
+                <div className="bg-rose-50 rounded-lg p-2"><div className="font-bold text-rose-700 text-lg">{active.responseTime}</div><div className="text-gray-500">Response</div></div>
+              </div>
+              <p className="mt-4 text-gray-700">{active.bio}</p>
+              <div className="mt-3">
+                <div className="text-xs font-semibold text-gray-500 mb-1">Specialization:</div>
+                <div className="flex flex-wrap gap-1">{active.specialization.map(s=> <span key={s} className="chip bg-emerald-50 text-emerald-700">{s}</span>)}</div>
+              </div>
+              <div className="mt-3">
+                <div className="text-xs font-semibold text-gray-500 mb-1">Languages:</div>
+                <div className="flex flex-wrap gap-1">{active.languages.map(s=> <span key={s} className="chip bg-gray-100">{s}</span>)}</div>
+              </div>
+              <div className="mt-3">
+                <div className="text-xs font-semibold text-gray-500 mb-1">Countries Handled:</div>
+                <div className="flex flex-wrap gap-1">{active.countries.map(s=> <span key={s} className="chip bg-blue-50 text-blue-700">🌍 {s}</span>)}</div>
+              </div>
+
+              <div className="mt-5 font-display text-xl">Packages</div>
+              <div className="grid md:grid-cols-3 gap-3 mt-2">
+                {active.packages.map((p,i)=>(
+                  <div key={p.name} className={"rounded-2xl p-4 border-2 "+(i===1?"border-emerald-brand bg-emerald-50":"border-gray-200 bg-white")}>
+                    {i===1 && <div className="text-xs font-semibold text-emerald-700 mb-1">⭐ Most Popular</div>}
+                    <div className="font-semibold">{p.name}</div>
+                    <div className="text-2xl font-bold mt-1">{p.price===0?"Free":"PKR "+p.price.toLocaleString()}</div>
+                    <ul className="mt-2 space-y-1 text-xs">
+                      {p.features.map(f=> <li key={f}>✓ {f}</li>)}
+                    </ul>
+                    <button onClick={()=>setBookingPkg({matchmaker:active, pkg:p})} className={"mt-3 w-full py-2 rounded-xl text-sm font-semibold "+(i===1?"btn-primary":"border")}>
+                      {p.price===0?"Book Free":"Hire Now"}
+                    </button>
+                  </div>
+                ))}
+              </div>
+
+              <div className="mt-5 flex gap-2">
+                <button onClick={()=>{ alert("Booking opens in Meetings tab"); }} className="flex-1 btn-primary py-2.5 rounded-xl font-semibold">📅 Book Consultation</button>
+                <button className="px-4 py-2.5 rounded-xl border font-semibold">💬 Message</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Booking Confirm */}
+      {bookingPkg && (
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
+          <div className="bg-white max-w-md w-full rounded-3xl p-6">
+            <div className="text-4xl text-center">🎯</div>
+            <div className="font-display text-2xl text-center mt-2">Confirm Booking</div>
+            <div className="mt-3 bg-emerald-50 rounded-xl p-3 text-sm">
+              <div><b>Matchmaker:</b> {bookingPkg.matchmaker.name}</div>
+              <div><b>Package:</b> {bookingPkg.pkg.name}</div>
+              <div><b>Price:</b> {bookingPkg.pkg.price===0?"Free":"PKR "+bookingPkg.pkg.price.toLocaleString()}</div>
+            </div>
+            <p className="text-sm text-gray-600 mt-3">After confirmation, you'll be redirected to payment (if paid). The matchmaker will contact you within their response time ({bookingPkg.matchmaker.responseTime}).</p>
+            <div className="mt-4 flex gap-2">
+              <button onClick={()=>{
+                const hired = JSON.parse(localStorage.getItem("rishta_hired_matchmakers")||"[]");
+                hired.push({ ...bookingPkg, time:new Date().toISOString(), status:"active" });
+                localStorage.setItem("rishta_hired_matchmakers", JSON.stringify(hired));
+                alert("✓ Booking confirmed!\n\nYour matchmaker will contact you soon.\nStatus: Managed by "+bookingPkg.matchmaker.name+" ("+bookingPkg.matchmaker.level+")");
+                setBookingPkg(null); setActive(null);
+              }} className="flex-1 btn-primary py-2 rounded-xl font-semibold">Confirm</button>
+              <button onClick={()=>setBookingPkg(null)} className="px-4 py-2 rounded-xl border">Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ---------------- Meetings ---------------- */
+function Meetings({user}){
+  const [meetings, setMeetings] = useState(()=> JSON.parse(localStorage.getItem("rishta_meetings_"+user.id)||"[]"));
+  const [showNew, setShowNew] = useState(false);
+  const [form, setForm] = useState({ title:"", with:"", date:"", time:"", type:"google-meet", duration:30, notes:"" });
+
+  const create = ()=>{
+    if(!form.title || !form.date || !form.time){ alert("Fill required fields"); return; }
+    // Auto-generate meeting link
+    let link = "";
+    if(form.type==="google-meet") link = "https://meet.google.com/"+Math.random().toString(36).slice(2,8)+"-"+Math.random().toString(36).slice(2,6)+"-"+Math.random().toString(36).slice(2,5);
+    else if(form.type==="zoom") link = "https://zoom.us/j/"+Math.floor(Math.random()*9000000000+1000000000);
+    else if(form.type==="whatsapp") link = "https://wa.me/"+(form.with.replace(/[^0-9]/g,"")||"923001234567");
+    const m = { id:Date.now(), ...form, link, status:"upcoming", createdAt:new Date().toISOString() };
+    const next = [...meetings, m];
+    setMeetings(next);
+    localStorage.setItem("rishta_meetings_"+user.id, JSON.stringify(next));
+    setShowNew(false);
+    setForm({ title:"", with:"", date:"", time:"", type:"google-meet", duration:30, notes:"" });
+  };
+
+  const remove = (id)=>{
+    const next = meetings.filter(m=>m.id!==id);
+    setMeetings(next);
+    localStorage.setItem("rishta_meetings_"+user.id, JSON.stringify(next));
+  };
+
+  return (
+    <div className="max-w-4xl mx-auto p-5 pb-24">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="font-display text-2xl text-emerald-brand">Meetings & Appointments</h2>
+          <p className="font-urdu text-gray-500">ملاقاتیں اور اپوائنٹمنٹس</p>
+        </div>
+        <button onClick={()=>setShowNew(true)} className="btn-primary px-4 py-2 rounded-xl text-sm font-semibold">+ Schedule Meeting</button>
+      </div>
+
+      {showNew && (
+        <div className="mt-4 bg-white rounded-2xl shadow-card p-5">
+          <div className="font-semibold mb-3">New Meeting</div>
+          <div className="grid md:grid-cols-2 gap-3">
+            <Field label="Title *"><input className="inp" placeholder="Family introduction call" value={form.title} onChange={e=>setForm({...form, title:e.target.value})}/></Field>
+            <Field label="With (name or phone)"><input className="inp" placeholder="Areeba Fatima / +92300…" value={form.with} onChange={e=>setForm({...form, with:e.target.value})}/></Field>
+            <Field label="Date *"><input type="date" className="inp" value={form.date} onChange={e=>setForm({...form, date:e.target.value})}/></Field>
+            <Field label="Time *"><input type="time" className="inp" value={form.time} onChange={e=>setForm({...form, time:e.target.value})}/></Field>
+            <Field label="Meeting Type">
+              <select className="inp" value={form.type} onChange={e=>setForm({...form, type:e.target.value})}>
+                <option value="google-meet">🎥 Google Meet</option>
+                <option value="zoom">📞 Zoom</option>
+                <option value="whatsapp">💬 WhatsApp Video</option>
+                <option value="audio">📞 Audio Call</option>
+                <option value="in-person">🤝 In Person</option>
+              </select>
+            </Field>
+            <Field label="Duration (min)"><input type="number" className="inp" value={form.duration} onChange={e=>setForm({...form, duration:+e.target.value})}/></Field>
+            <Field label="Notes" full><textarea className="inp" rows="2" value={form.notes} onChange={e=>setForm({...form, notes:e.target.value})}/></Field>
+          </div>
+          <div className="text-xs text-gray-500 mt-2 bg-emerald-50 rounded-lg p-2">
+            ✨ Meeting link will be auto-generated based on type. Calendar reminder will be sent.
+          </div>
+          <div className="mt-3 flex gap-2">
+            <button onClick={create} className="btn-primary px-5 py-2 rounded-xl">Create Meeting</button>
+            <button onClick={()=>setShowNew(false)} className="px-5 py-2 rounded-xl border">Cancel</button>
+          </div>
+        </div>
+      )}
+
+      <div className="mt-5 space-y-2">
+        {meetings.length===0 && <div className="text-center text-gray-500 italic py-10">No meetings scheduled. Click "Schedule Meeting" to create one.</div>}
+        {meetings.sort((a,b)=> (a.date+a.time).localeCompare(b.date+b.time)).map(m=>(
+          <div key={m.id} className="bg-white rounded-2xl shadow-card border p-4">
+            <div className="flex items-start justify-between">
+              <div>
+                <div className="font-semibold">{m.title}</div>
+                <div className="text-sm text-gray-600 mt-0.5">📅 {m.date} at {m.time} • {m.duration} min</div>
+                {m.with && <div className="text-sm text-gray-600">With: {m.with}</div>}
+                {m.notes && <div className="text-xs text-gray-500 mt-1">{m.notes}</div>}
+              </div>
+              <span className="chip badge-verified">{m.status||"upcoming"}</span>
+            </div>
+            {m.link && (
+              <div className="mt-2 flex flex-wrap gap-2">
+                <a href={m.link} target="_blank" className="chip bg-emerald-500 text-white">🔗 Join Meeting</a>
+                <button onClick={()=>{ navigator.clipboard.writeText(m.link); alert("Link copied!"); }} className="chip bg-gray-100">📋 Copy Link</button>
+                <span className="chip bg-blue-50 text-blue-700">{m.type==="google-meet"?"Google Meet":m.type==="zoom"?"Zoom":m.type==="whatsapp"?"WhatsApp":m.type==="audio"?"Audio Call":"In Person"}</span>
+                <button onClick={()=>remove(m.id)} className="chip bg-red-50 text-red-600 ml-auto">Cancel</button>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/* ---------------- Matchmaker Dashboard (CRM-style) ---------------- */
+function MatchmakerDashboard({user}){
+  // Demo pipeline data
+  const [pipeline, setPipeline] = useState({
+    lead: [
+      { id:"l1", name:"Ahmed Family (Lahore)", phone:"+92301...", value:25000, since:"2d" },
+      { id:"l2", name:"Khan Family (Karachi)", phone:"+92321...", value:25000, since:"5d" }
+    ],
+    interested: [
+      { id:"i1", name:"Saleem Family", phone:"+92302...", value:35000, since:"1w" }
+    ],
+    meeting: [
+      { id:"me1", name:"Iqbal Family", phone:"+92300...", value:35000, meetingDate:"2026-05-25", since:"3d" }
+    ],
+    negotiation: [
+      { id:"n1", name:"Hussain Family + Tariq Family", phone:"—", value:150000, since:"2w" }
+    ],
+    engagement: [
+      { id:"e1", name:"Ali ⟷ Sara", phone:"—", value:150000, since:"1mo" }
+    ],
+    married: [
+      { id:"m1", name:"Bilal ⟷ Areeba", phone:"—", value:200000, since:"3mo" },
+      { id:"m2", name:"Zaid ⟷ Mahnoor", phone:"—", value:150000, since:"6mo" }
+    ]
+  });
+
+  const stages = [
+    { key:"lead", t:"🆕 New Leads", color:"bg-gray-100 border-gray-300" },
+    { key:"interested", t:"💚 Interested", color:"bg-emerald-50 border-emerald-300" },
+    { key:"meeting", t:"📅 Meeting", color:"bg-blue-50 border-blue-300" },
+    { key:"negotiation", t:"🤝 Negotiation", color:"bg-amber-50 border-amber-300" },
+    { key:"engagement", t:"💍 Engagement", color:"bg-violet-50 border-violet-300" },
+    { key:"married", t:"🎉 Married", color:"bg-rose-50 border-rose-300" }
+  ];
+  const totalRevenue = Object.values(pipeline).flat().reduce((s,c)=>s+(c.value||0),0);
+  const totalClients = Object.values(pipeline).flat().length;
+  const successful = pipeline.married.length;
+
+  return (
+    <div className="max-w-7xl mx-auto p-5 pb-24">
+      <div className="rounded-3xl gradient-hero text-white p-6 shadow-soft">
+        <div className="flex items-center justify-between">
+          <div>
+            <span className="chip bg-white/15 border border-white/20">💎 Matchmaker CRM</span>
+            <h1 className="font-display text-3xl mt-2">{user.name||"Matchmaker"} Dashboard</h1>
+            <p className="text-white/80 mt-1">Manage your clients, pipeline and earnings</p>
+          </div>
+          <div className="text-right hidden md:block">
+            <div className="text-3xl">⭐ 4.8</div>
+            <div className="text-xs text-white/70">Your rating</div>
+          </div>
+        </div>
+        <div className="mt-5 grid grid-cols-2 md:grid-cols-4 gap-3">
+          <Stat label="Active Clients" value={totalClients - successful}/>
+          <Stat label="Successful Marriages" value={successful}/>
+          <Stat label="Pipeline Value" value={"PKR "+(totalRevenue/100000).toFixed(1)+" Lac"}/>
+          <Stat label="Success Rate" value={Math.round(successful/Math.max(totalClients,1)*100)+"%"}/>
+        </div>
+      </div>
+
+      {/* Pipeline (Kanban-style) */}
+      <h3 className="mt-6 font-display text-xl">Client Pipeline</h3>
+      <div className="mt-3 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+        {stages.map(s=>(
+          <div key={s.key} className={"rounded-2xl border-2 p-3 "+s.color}>
+            <div className="font-semibold text-sm mb-2 flex items-center justify-between">
+              <span>{s.t}</span>
+              <span className="text-xs bg-white px-1.5 rounded-full">{pipeline[s.key].length}</span>
+            </div>
+            <div className="space-y-2">
+              {pipeline[s.key].map(c=>(
+                <div key={c.id} className="bg-white rounded-xl p-2 text-xs shadow-sm">
+                  <div className="font-semibold">{c.name}</div>
+                  <div className="text-gray-500">{c.phone}</div>
+                  <div className="mt-1 flex items-center justify-between">
+                    <span className="text-emerald-700 font-semibold">PKR {(c.value||0).toLocaleString()}</span>
+                    <span className="text-gray-400">{c.since}</span>
+                  </div>
+                  {c.meetingDate && <div className="mt-1 text-blue-600">📅 {c.meetingDate}</div>}
+                </div>
+              ))}
+              {pipeline[s.key].length===0 && <div className="text-xs text-gray-400 italic text-center py-2">Empty</div>}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* AI Assistant */}
+      <div className="mt-6 grid md:grid-cols-2 gap-4">
+        <div className="bg-white rounded-2xl shadow-card p-5">
+          <div className="font-semibold flex items-center gap-2">🤖 AI Assistant</div>
+          <div className="mt-3 space-y-2 text-sm">
+            <div className="p-2 rounded-lg bg-emerald-50">💡 Iqbal Family meeting is in 3 days — send reminder?</div>
+            <div className="p-2 rounded-lg bg-amber-50">⚠️ Khan Family hasn't responded in 5 days — follow up?</div>
+            <div className="p-2 rounded-lg bg-blue-50">✨ New compatible match found for Ahmed Family (87% match)</div>
+            <div className="p-2 rounded-lg bg-violet-50">📈 Your response time improved 25% this month — share testimonial?</div>
+          </div>
+        </div>
+        <div className="bg-white rounded-2xl shadow-card p-5">
+          <div className="font-semibold">Revenue Analytics</div>
+          <div className="mt-3 grid grid-cols-2 gap-2">
+            <Stat2 label="This Month" value="PKR 2.5 Lac"/>
+            <Stat2 label="Last Month" value="PKR 1.8 Lac"/>
+            <Stat2 label="Year Total" value="PKR 18 Lac"/>
+            <Stat2 label="Pending" value="PKR 60k"/>
+          </div>
+          <div className="mt-3 text-xs text-gray-500">Commission rate: 15% of package value</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ---------------- Edit History ---------------- */
+function EditHistory({user}){
+  const history = JSON.parse(localStorage.getItem("rishta_edit_history_"+user.id)||"[]");
+  const pending = JSON.parse(localStorage.getItem("rishta_pending_edit_"+user.id)||"null");
+  return (
+    <div className="max-w-3xl mx-auto p-5 pb-24">
+      <div className="bg-white rounded-2xl shadow-card p-5">
+        <h2 className="font-display text-2xl text-emerald-brand">Edit History & Activity Log</h2>
+        <p className="font-urdu text-gray-500">ترامیم کی تاریخ</p>
+        {pending && (
+          <div className="mt-4 p-4 bg-amber-50 border-2 border-amber-300 rounded-xl">
+            <div className="flex items-center gap-2 mb-2">
+              <span className="chip bg-amber-200 text-amber-900">⏳ Pending</span>
+              <div className="text-xs text-amber-700">{new Date(pending.time).toLocaleString()}</div>
+            </div>
+            <div className="text-sm font-semibold">Awaiting admin review</div>
+            <div className="mt-2 space-y-1 text-sm">
+              {Object.entries(pending.changes).map(([k,v])=>(
+                <div key={k} className="grid grid-cols-3 gap-2 py-1 border-t border-amber-200">
+                  <div className="font-medium">{k}</div>
+                  <div className="line-through text-red-600">{String(v.old||"-")}</div>
+                  <div className="text-emerald-700 font-semibold">{String(v.new||"-")}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+        <div className="mt-4 space-y-2">
+          {history.length===0 && !pending && <div className="text-gray-500 italic text-center py-8">No edit history yet. All profile changes will be logged here.</div>}
+          {history.map(h=>(
+            <div key={h.id} className="p-3 rounded-xl border">
+              <div className="flex items-center justify-between mb-1">
+                <span className={"chip "+(h.status==="approved"?"badge-verified":h.status==="rejected"?"bg-red-100 text-red-700":"bg-amber-100 text-amber-700")}>
+                  {h.status==="approved"?"✓ Approved":h.status==="rejected"?"✗ Rejected":"⏳ Pending"}
+                </span>
+                <div className="text-xs text-gray-500">{new Date(h.time).toLocaleString()}</div>
+              </div>
+              <div className="text-xs text-gray-600">Changed: {Object.keys(h.changes||{}).join(", ")}</div>
+            </div>
+          ))}
+        </div>
+        <div className="mt-4 text-xs text-gray-500 bg-gray-50 rounded-xl p-3">
+          🔒 All changes to sensitive fields (name, age, income, city, marital status, photos) require admin approval before going live. This protects against fraud and ensures profile authenticity.
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ---------------- Notifications ---------------- */
+function Notifications(){
+  const items = [
+    { i:"💚", t:"Hamza Khan sent you an interest", time:"2h ago" },
+    { i:"✅", t:"Your CNIC verification approved", time:"Yesterday" },
+    { i:"💬", t:"New message from Areeba Fatima", time:"Yesterday" },
+    { i:"📅", t:"Family meeting request from Sana Iqbal", time:"2 days ago" },
+    { i:"⚠", t:"Your profile edit pending admin review", time:"3 days ago" },
+    { i:"⏳", t:"Subscription expiring in 5 days", time:"3 days ago" }
+  ];
+  return (
+    <div className="max-w-3xl mx-auto p-5 pb-24">
+      <div className="bg-white rounded-2xl shadow-card p-5">
+        <h2 className="font-display text-2xl text-emerald-brand">Notifications</h2>
+        <p className="font-urdu text-gray-500">اطلاعات</p>
+        <div className="mt-3 space-y-2">
+          {items.map((n,i)=>(
+            <div key={i} className="flex items-center gap-3 p-3 rounded-xl border">
+              <div className="text-2xl">{n.i}</div>
+              <div className="flex-1 text-sm">{n.t}</div>
+              <div className="text-xs text-gray-500">{n.time}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ---------------- Admin Layout (separate dashboard) ---------------- */
+function AdminLayout({user, onExit, onLogout, children}){
+  const [tab, setTab] = useState(()=> location.hash.replace("#/admin/","").replace("#/admin","") || "dashboard");
+
+  useEffect(()=>{
+    const handler = ()=>{
+      const h = location.hash.replace("#/admin/","").replace("#/admin","") || "dashboard";
+      setTab(h);
+    };
+    window.addEventListener("hashchange", handler);
+    return ()=>window.removeEventListener("hashchange", handler);
+  },[]);
+
+  const go = (t)=>{ location.hash = "#/admin/"+t; setTab(t); };
+
+  const menu = [
+    { id:"dashboard", t:"Dashboard", icon:"📊" },
+    { id:"users", t:"Users", icon:"👥" },
+    { id:"edits", t:"Pending Edits", icon:"⏳" },
+    { id:"reports", t:"Reports", icon:"⚠️" },
+    { id:"fraud", t:"Fraud Alerts", icon:"🚨" },
+    { id:"blogs", t:"Blogs", icon:"📝" },
+    { id:"banners", t:"Banners", icon:"🎯" },
+    { id:"contacts", t:"Messages", icon:"📬" },
+    { id:"subs", t:"Subscriptions", icon:"💳" },
+    { id:"analytics", t:"Analytics", icon:"📈" },
+    { id:"settings", t:"Site Settings", icon:"⚙️" },
+  ];
+
+  return (
+    <div className="min-h-screen bg-slate-50">
+      {/* Top admin header */}
+      <div className="bg-slate-900 text-white px-5 py-3 flex items-center justify-between sticky top-0 z-30">
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 rounded-lg gradient-hero flex items-center justify-center font-bold">A</div>
+          <div>
+            <div className="font-display text-lg">RishtaConnect Admin</div>
+            <div className="text-xs text-white/60">Control Panel • /admin</div>
+          </div>
+        </div>
+        <div className="flex items-center gap-2 text-sm">
+          <span className="hidden md:inline text-white/70">{user.name} ({user.role})</span>
+          <button onClick={onExit} className="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/15">← Exit to Site</button>
+          <button onClick={onLogout} className="px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-700">Logout</button>
+        </div>
+      </div>
+
+      <div className="max-w-7xl mx-auto grid md:grid-cols-[240px,1fr] gap-0">
+        {/* Sidebar */}
+        <aside className="bg-slate-800 text-slate-200 md:min-h-[calc(100vh-60px)] p-2 md:p-3 sticky md:top-[60px] md:self-start">
+          <div className="md:hidden p-2 text-xs text-slate-400">Admin Menu</div>
+          <div className="flex md:flex-col gap-1 overflow-x-auto md:overflow-visible scrollbar-hide">
+            {menu.map(m=>(
+              <button key={m.id} onClick={()=>go(m.id)} className={"flex items-center gap-2 px-3 py-2 rounded-lg whitespace-nowrap text-sm font-medium "+(tab===m.id?"bg-emerald-600 text-white":"hover:bg-slate-700")}>
+                <span>{m.icon}</span><span>{m.t}</span>
+              </button>
+            ))}
+          </div>
+        </aside>
+
+        {/* Content */}
+        <main className="p-5">
+          <AdminContent tab={tab} go={go}/>
+        </main>
+      </div>
+    </div>
+  );
+}
+
+function AdminContent({tab, go}){
+  const [users, setUsers] = useState([]);
+  const [analytics, setAnalytics] = useState(null);
+  const [edits, setEdits] = useState([]);
+  const [reports, setReports] = useState([]);
+
+  useEffect(()=>{
+    (async ()=>{
+      const [u, a, e, r] = await Promise.all([
+        api("/api/admin/users"), api("/api/admin/analytics"),
+        api("/api/admin/edits"), api("/api/admin/reports")
+      ]);
+      if(u) setUsers(u);
+      if(a) setAnalytics(a);
+      if(e) setEdits(e);
+      if(r) setReports(r);
+    })();
+  },[tab]);
+
+  if(tab==="dashboard") return (
+    <div className="space-y-5">
+      <h1 className="font-display text-3xl">Dashboard</h1>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <DashCard icon="👥" label="Total Users" value={analytics?.totalUsers||0} color="bg-emerald-50 text-emerald-700"/>
+        <DashCard icon="✅" label="Verified" value={analytics?.verified||0} color="bg-blue-50 text-blue-700"/>
+        <DashCard icon="💎" label="Premium" value={(analytics?.premium||0)+(analytics?.vip||0)} color="bg-amber-50 text-amber-700"/>
+        <DashCard icon="📬" label="New Messages" value={analytics?.newContacts||0} color="bg-rose-50 text-rose-700"/>
+        <DashCard icon="⏳" label="Pending Edits" value={analytics?.pendingEdits||0} color="bg-violet-50 text-violet-700"/>
+        <DashCard icon="📝" label="Blog Posts" value={analytics?.totalBlogs||0} color="bg-teal-50 text-teal-700"/>
+        <DashCard icon="⚠️" label="Banned" value={analytics?.banned||0} color="bg-red-50 text-red-700"/>
+        <DashCard icon="📬" label="Total Contacts" value={analytics?.totalContacts||0} color="bg-slate-50 text-slate-700"/>
+      </div>
+      <div className="grid md:grid-cols-2 gap-4">
+        <div className="bg-white rounded-2xl shadow-card p-5">
+          <div className="font-semibold mb-2">Quick Actions</div>
+          <div className="grid grid-cols-2 gap-2">
+            <button onClick={()=>go("blogs")} className="p-3 rounded-xl border hover:bg-slate-50 text-left">📝 Write Blog</button>
+            <button onClick={()=>go("banners")} className="p-3 rounded-xl border hover:bg-slate-50 text-left">🎯 Add Banner</button>
+            <button onClick={()=>go("contacts")} className="p-3 rounded-xl border hover:bg-slate-50 text-left">📬 Read Messages</button>
+            <button onClick={()=>go("settings")} className="p-3 rounded-xl border hover:bg-slate-50 text-left">⚙️ Site Settings</button>
+          </div>
+        </div>
+        <div className="bg-white rounded-2xl shadow-card p-5">
+          <div className="font-semibold mb-2">Pending Tasks</div>
+          <div className="space-y-1 text-sm">
+            <div>⏳ {analytics?.pendingEdits||0} profile edits awaiting your review</div>
+            <div>📬 {analytics?.newContacts||0} unread contact messages</div>
+            <div>⚠️ Reports requiring action</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
+  if(tab==="users") return <AdminUsersTab users={users} reload={()=>api("/api/admin/users").then(u=>u&&setUsers(u))}/>;
+  if(tab==="edits") return <AdminEditsTab edits={edits} reload={()=>api("/api/admin/edits").then(e=>e&&setEdits(e))}/>;
+  if(tab==="reports") return <AdminReportsTab reports={reports}/>;
+  if(tab==="fraud") return <AdminFraudTab/>;
+  if(tab==="blogs") return <div className="bg-white rounded-2xl shadow-card p-5"><h1 className="font-display text-2xl mb-3">Blog Management</h1><AdminBlogs/></div>;
+  if(tab==="banners") return <div className="bg-white rounded-2xl shadow-card p-5"><h1 className="font-display text-2xl mb-3">Banner Management</h1><AdminBanners/></div>;
+  if(tab==="contacts") return <div className="bg-white rounded-2xl shadow-card p-5"><h1 className="font-display text-2xl mb-3">Contact Messages</h1><AdminContacts/></div>;
+  if(tab==="subs") return <AdminSubsTab analytics={analytics}/>;
+  if(tab==="analytics") return <AdminAnalyticsTab analytics={analytics}/>;
+  if(tab==="settings") return <div className="bg-white rounded-2xl shadow-card p-5"><h1 className="font-display text-2xl mb-3">Site Settings</h1><AdminSettings/></div>;
+  return null;
+}
+
+function DashCard({icon, label, value, color}){
+  return (
+    <div className={"rounded-2xl p-4 "+(color||"bg-white")}>
+      <div className="text-2xl">{icon}</div>
+      <div className="text-xs mt-1 opacity-80">{label}</div>
+      <div className="font-bold text-2xl">{value}</div>
+    </div>
+  );
+}
+
+function AdminUsersTab({users, reload}){
+  const [q, setQ] = useState("");
+  const filtered = users.filter(u=> (u.name+u.email+u.city||"").toLowerCase().includes(q.toLowerCase()));
+  const banUser = async (id, banned)=>{
+    await api("/api/admin/users/"+id+(banned?"/unban":"/ban"), { method:"POST" });
+    reload();
+  };
+  return (
+    <div className="bg-white rounded-2xl shadow-card p-5">
+      <div className="flex items-center justify-between mb-3">
+        <h1 className="font-display text-2xl">Users ({users.length})</h1>
+        <input className="inp w-64" placeholder="Search…" value={q} onChange={e=>setQ(e.target.value)}/>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead><tr className="text-left text-gray-500 border-b">
+            <th className="py-2">Name</th><th>Email</th><th>City</th><th>Trust</th><th>Plan</th><th>Verified</th><th>Status</th><th>Actions</th>
+          </tr></thead>
+          <tbody>
+            {filtered.map(u=>(
+              <tr key={u._id||u.id} className="border-b hover:bg-slate-50">
+                <td className="py-2">{u.name}</td>
+                <td className="text-xs">{u.email}</td>
+                <td>{u.city}</td>
+                <td>{u.trustScore}</td>
+                <td><span className="chip bg-emerald-50 text-emerald-700">{u.plan}</span></td>
+                <td>{u.verifications?.cnic?"✓":"—"}</td>
+                <td>{u.banned ? <span className="chip bg-red-100 text-red-700">Banned</span> : <span className="chip bg-emerald-100 text-emerald-700">Active</span>}</td>
+                <td>
+                  <button onClick={()=>banUser(u._id||u.id, u.banned)} className={"text-sm "+(u.banned?"text-emerald-600":"text-red-600")}>{u.banned?"Unban":"Ban"}</button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function AdminEditsTab({edits, reload}){
+  const action = async (id, act)=>{
+    await api("/api/admin/edits/"+id+"/"+act, { method:"POST" });
+    reload();
+  };
+  return (
+    <div className="bg-white rounded-2xl shadow-card p-5">
+      <h1 className="font-display text-2xl mb-3">Pending Profile Edits ({edits.length})</h1>
+      {edits.length===0 && <div className="text-gray-500 italic">No pending edits. All caught up! ✓</div>}
+      <div className="space-y-3">
+        {edits.map(e=>(
+          <div key={e._id} className="border rounded-xl p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="font-semibold">User ID: {e.userId}</div>
+                <div className="text-xs text-gray-500">Submitted: {new Date(e.createdAt).toLocaleString()}</div>
+              </div>
+              <span className="chip bg-amber-100 text-amber-800">Pending Review</span>
+            </div>
+            <div className="mt-3 bg-slate-50 rounded-xl p-3">
+              <div className="text-xs font-semibold text-gray-500 mb-2">Changes (Old → New):</div>
+              {Object.entries(e.changes||{}).map(([k,v])=>(
+                <div key={k} className="grid grid-cols-3 gap-2 text-sm py-1">
+                  <div className="font-medium">{k}</div>
+                  <div className="line-through text-red-500">{String(v.old||"-")}</div>
+                  <div className="text-emerald-700 font-semibold">{String(v.new||"-")}</div>
+                </div>
+              ))}
+            </div>
+            <div className="mt-3 flex gap-2 flex-wrap">
+              <button onClick={()=>action(e._id,"approve")} className="btn-primary px-4 py-1.5 rounded-lg text-sm">✓ Approve</button>
+              <button onClick={()=>action(e._id,"reject")} className="px-4 py-1.5 rounded-lg border text-sm text-red-600">✗ Reject</button>
+              <button onClick={()=>alert("Proof request sent to user")} className="px-4 py-1.5 rounded-lg border text-sm">📄 Ask for Proof</button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function AdminReportsTab({reports}){
+  return (
+    <div className="bg-white rounded-2xl shadow-card p-5">
+      <h1 className="font-display text-2xl mb-3">User Reports ({reports.length})</h1>
+      {reports.length===0 && <div className="text-gray-500 italic">No reports.</div>}
+      <div className="space-y-2">
+        {reports.map(r=>(
+          <div key={r._id} className="border rounded-xl p-3 flex items-center justify-between">
+            <div>
+              <div className="font-semibold">Reported: {r.reportedUserId}</div>
+              <div className="text-sm text-gray-600">{r.reason}</div>
+              <div className="text-xs text-gray-400">By {r.reporterId} • {new Date(r.createdAt).toLocaleString()}</div>
+            </div>
+            <div className="flex gap-2">
+              <button className="px-3 py-1.5 rounded-lg border text-sm">Warn</button>
+              <button className="px-3 py-1.5 rounded-lg border text-sm text-amber-700">Restrict</button>
+              <button className="px-3 py-1.5 rounded-lg border text-sm text-red-700">Ban</button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function AdminFraudTab(){
+  return (
+    <div className="bg-white rounded-2xl shadow-card p-5">
+      <h1 className="font-display text-2xl mb-3">🚨 AI Fraud Detection</h1>
+      <div className="space-y-2 text-sm">
+        <div className="p-3 rounded-xl border bg-red-50 border-red-200">
+          <div className="font-semibold text-red-800">⚠ Duplicate Device Fingerprint</div>
+          <div className="text-red-700">3 accounts using same device detected.</div>
+          <button className="mt-2 text-xs font-semibold underline">Review →</button>
+        </div>
+        <div className="p-3 rounded-xl border bg-amber-50 border-amber-200">
+          <div className="font-semibold text-amber-800">⚠ Same CNIC on Multiple Accounts</div>
+          <div className="text-amber-700">2 accounts using identical CNIC number.</div>
+          <button className="mt-2 text-xs font-semibold underline">Review →</button>
+        </div>
+        <div className="p-3 rounded-xl border bg-amber-50 border-amber-200">
+          <div className="font-semibold text-amber-800">⚠ Face Match Across 4 Accounts (AI)</div>
+          <div className="text-amber-700">AI face recognition flagged 4 profiles with similar faces.</div>
+          <button className="mt-2 text-xs font-semibold underline">Review →</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AdminSubsTab({analytics}){
+  return (
+    <div className="bg-white rounded-2xl shadow-card p-5">
+      <h1 className="font-display text-2xl mb-3">Subscriptions</h1>
+      <div className="grid md:grid-cols-3 gap-3">
+        <DashCard icon="🆓" label="Free" value={analytics?.free||0} color="bg-gray-50 text-gray-700"/>
+        <DashCard icon="💎" label="Premium" value={analytics?.premium||0} color="bg-emerald-50 text-emerald-700"/>
+        <DashCard icon="👑" label="VIP" value={analytics?.vip||0} color="bg-amber-50 text-amber-700"/>
+      </div>
+    </div>
+  );
+}
+
+function AdminAnalyticsTab({analytics}){
+  return (
+    <div className="bg-white rounded-2xl shadow-card p-5">
+      <h1 className="font-display text-2xl mb-3">Analytics</h1>
+      <div className="grid md:grid-cols-4 gap-3">
+        <DashCard icon="👥" label="Total" value={analytics?.totalUsers||0}/>
+        <DashCard icon="✅" label="Verified" value={analytics?.verified||0}/>
+        <DashCard icon="💎" label="Paid" value={(analytics?.premium||0)+(analytics?.vip||0)}/>
+        <DashCard icon="⚠️" label="Banned" value={analytics?.banned||0}/>
+      </div>
+    </div>
+  );
+}
+
+/* ---------------- Old Admin Panel (kept for compatibility) ---------------- */
+function AdminPanel({users, setUsers}){
+  const [tab, setTab] = useState("users");
+  const pendingEdits = [
+    { id:"e1", user:"Zeeshan Ahmed", field:"Income", old:"3 Lac", neu:"5 Lac", time:"2h"},
+    { id:"e2", user:"Sana Iqbal", field:"City", old:"Lahore", neu:"Faisalabad", time:"5h"},
+  ];
+  const reports = [
+    { id:"r1", user:"Unknown123", reason:"Fake profile / wrong photos", time:"1d", status:"Pending"},
+    { id:"r2", user:"Spammer42", reason:"Sending inappropriate messages", time:"3d", status:"Investigating"},
+  ];
+  return (
+    <div className="max-w-6xl mx-auto p-5 pb-24">
+      <div className="bg-white rounded-2xl shadow-card p-5">
+        <h2 className="font-display text-2xl text-emerald-brand">Admin Panel</h2>
+        <p className="font-urdu text-gray-500">منتظم پینل</p>
+        <div className="mt-3 flex flex-wrap gap-2 border-b overflow-x-auto scrollbar-hide">
+          {[
+            {id:"users",t:"Users"},
+            {id:"edits",t:"Pending Edits"},
+            {id:"reports",t:"Reports"},
+            {id:"fraud",t:"Fraud Alerts"},
+            {id:"subs",t:"Subscriptions"},
+            {id:"analytics",t:"Analytics"},
+            {id:"blogs",t:"📝 Blogs"},
+            {id:"banners",t:"🎯 Banners"},
+            {id:"contacts",t:"📬 Messages"},
+            {id:"settings",t:"⚙️ Site Settings"}
+          ].map(x=>(
+            <button key={x.id} onClick={()=>setTab(x.id)} className={"px-3 py-2 text-sm font-semibold border-b-2 whitespace-nowrap "+(tab===x.id?"border-emerald-brand text-emerald-brand":"border-transparent text-gray-500")}>{x.t}</button>
+          ))}
+        </div>
+
+        {tab==="users" && (
+          <table className="w-full mt-3 text-sm">
+            <thead><tr className="text-left text-gray-500 border-b"><th className="py-2">User</th><th>City</th><th>Trust</th><th>Verified</th><th>Action</th></tr></thead>
+            <tbody>
+              {users.map(u=>(
+                <tr key={u.id} className="border-b">
+                  <td className="py-2">{u.name}</td>
+                  <td>{u.city}</td>
+                  <td>{u.trustScore}</td>
+                  <td>{u.verifications?.cnic?"✓":"✗"}</td>
+                  <td><button className="text-red-600">Ban</button> · <button className="text-amber-600">Warn</button></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+        {tab==="edits" && (
+          <div className="mt-3 space-y-2">
+            {pendingEdits.map(e=>(
+              <div key={e.id} className="p-3 rounded-xl border flex items-center justify-between">
+                <div>
+                  <div className="font-semibold">{e.user}</div>
+                  <div className="text-sm text-gray-600">{e.field}: <span className="line-through text-red-500">{e.old}</span> → <span className="text-emerald-700">{e.neu}</span></div>
+                  <div className="text-xs text-gray-400">{e.time} ago</div>
+                </div>
+                <div className="flex gap-2">
+                  <button className="btn-primary px-3 py-1.5 rounded-lg text-sm">Approve</button>
+                  <button className="px-3 py-1.5 rounded-lg border text-sm">Reject</button>
+                  <button className="px-3 py-1.5 rounded-lg border text-sm">Ask Proof</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+        {tab==="reports" && (
+          <div className="mt-3 space-y-2">
+            {reports.map(r=>(
+              <div key={r.id} className="p-3 rounded-xl border flex items-center justify-between">
+                <div>
+                  <div className="font-semibold">{r.user}</div>
+                  <div className="text-sm text-gray-600">{r.reason}</div>
+                  <div className="text-xs text-gray-400">{r.time} ago • {r.status}</div>
+                </div>
+                <div className="flex gap-2">
+                  <button className="px-3 py-1.5 rounded-lg border text-sm">Warn</button>
+                  <button className="px-3 py-1.5 rounded-lg border text-sm text-amber-700">Restrict</button>
+                  <button className="px-3 py-1.5 rounded-lg border text-sm text-red-700">Ban</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+        {tab==="fraud" && (
+          <div className="mt-3 space-y-2 text-sm">
+            <div className="p-3 rounded-xl border bg-red-50 border-red-200">⚠ 3 accounts using same device fingerprint detected. <button className="font-semibold underline ml-2">Review</button></div>
+            <div className="p-3 rounded-xl border bg-amber-50 border-amber-200">⚠ Same CNIC uploaded on 2 accounts. <button className="font-semibold underline ml-2">Review</button></div>
+            <div className="p-3 rounded-xl border bg-amber-50 border-amber-200">⚠ Face match across 4 accounts (AI flagged). <button className="font-semibold underline ml-2">Review</button></div>
+          </div>
+        )}
+        {tab==="subs" && (
+          <div className="mt-3 grid md:grid-cols-3 gap-3">
+            <Stat2 label="Free" value="48,210"/>
+            <Stat2 label="Premium" value="3,148"/>
+            <Stat2 label="VIP" value="412"/>
+            <Stat2 label="MRR" value="PKR 88 Lac"/>
+            <Stat2 label="Churn" value="3.4%"/>
+            <Stat2 label="LTV" value="PKR 21k"/>
+          </div>
+        )}
+        {tab==="analytics" && (
+          <div className="mt-3 grid md:grid-cols-4 gap-3">
+            <Stat2 label="DAU" value="12,485"/>
+            <Stat2 label="Active Chats" value="6,212"/>
+            <Stat2 label="Verifications/wk" value="2,180"/>
+            <Stat2 label="Bans/mo" value="124"/>
+          </div>
+        )}
+        {tab==="blogs" && <AdminBlogs/>}
+        {tab==="banners" && <AdminBanners/>}
+        {tab==="contacts" && <AdminContacts/>}
+        {tab==="settings" && <AdminSettings/>}
+      </div>
+    </div>
+  );
+}
+
+/* ---------------- Admin: Blogs ---------------- */
+function AdminBlogs(){
+  const [blogs, setBlogs] = useState([]);
+  const [editing, setEditing] = useState(null);
+  const empty = { title:"", excerpt:"", content:"", coverImage:"📝", author:"", tags:[], published:true };
+
+  const load = async ()=>{
+    const list = await api("/api/blogs");
+    if(list) setBlogs(list);
+    else {
+      const local = JSON.parse(localStorage.getItem("rishta_blogs")||"[]");
+      setBlogs(local);
+    }
+  };
+  useEffect(()=>{ load(); },[]);
+
+  const save = async ()=>{
+    if(!editing.title || !editing.content){ alert("Title and content required"); return; }
+    if(editing._id){
+      const r = await api("/api/admin/blogs/"+editing._id, { method:"PUT", body: editing });
+      if(!r) {
+        const local = JSON.parse(localStorage.getItem("rishta_blogs")||"[]");
+        const idx = local.findIndex(b=>b._id===editing._id);
+        if(idx>=0) local[idx] = editing;
+        localStorage.setItem("rishta_blogs", JSON.stringify(local));
+      }
+    } else {
+      const r = await api("/api/admin/blogs", { method:"POST", body: editing });
+      if(!r) {
+        const local = JSON.parse(localStorage.getItem("rishta_blogs")||"[]");
+        local.push({ ...editing, _id:"local-"+Date.now(), createdAt:new Date().toISOString() });
+        localStorage.setItem("rishta_blogs", JSON.stringify(local));
+      }
+    }
+    setEditing(null);
+    load();
+  };
+  const remove = async (id)=>{
+    if(!confirm("Delete this blog?")) return;
+    const r = await api("/api/admin/blogs/"+id, { method:"DELETE" });
+    if(!r) {
+      const local = JSON.parse(localStorage.getItem("rishta_blogs")||"[]");
+      localStorage.setItem("rishta_blogs", JSON.stringify(local.filter(b=>b._id!==id)));
+    }
+    load();
+  };
+
+  if(editing) return (
+    <div className="mt-3 space-y-3">
+      <div className="font-semibold text-lg">{editing._id?"Edit Blog":"New Blog Post"}</div>
+      <input className="inp" placeholder="Title" value={editing.title} onChange={e=>setEditing({...editing, title:e.target.value})}/>
+      <input className="inp" placeholder="Cover emoji or image URL (e.g. 🌙)" value={editing.coverImage} onChange={e=>setEditing({...editing, coverImage:e.target.value})}/>
+      <input className="inp" placeholder="Author" value={editing.author} onChange={e=>setEditing({...editing, author:e.target.value})}/>
+      <input className="inp" placeholder="Excerpt (short summary)" value={editing.excerpt} onChange={e=>setEditing({...editing, excerpt:e.target.value})}/>
+      <textarea className="inp" rows="8" placeholder="Full content (supports line breaks)" value={editing.content} onChange={e=>setEditing({...editing, content:e.target.value})}/>
+      <input className="inp" placeholder="Tags (comma-separated)" value={(editing.tags||[]).join(", ")} onChange={e=>setEditing({...editing, tags:e.target.value.split(",").map(s=>s.trim()).filter(Boolean)})}/>
+      <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={editing.published} onChange={e=>setEditing({...editing, published:e.target.checked})}/> Published (visible on website)</label>
+      <div className="flex gap-2">
+        <button onClick={save} className="btn-primary px-4 py-2 rounded-xl">Save Blog</button>
+        <button onClick={()=>setEditing(null)} className="px-4 py-2 rounded-xl border">Cancel</button>
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="mt-3">
+      <button onClick={()=>setEditing({...empty})} className="btn-primary px-4 py-2 rounded-xl mb-3">+ New Blog Post</button>
+      <div className="space-y-2">
+        {blogs.length===0 && <div className="text-gray-500 italic">No blogs yet. Add your first post.</div>}
+        {blogs.map(b=>(
+          <div key={b._id} className="p-3 rounded-xl border flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="text-2xl">{b.coverImage||"📝"}</div>
+              <div>
+                <div className="font-semibold">{b.title}</div>
+                <div className="text-xs text-gray-500">{b.author} • {b.published?"Published":"Draft"} • {(b.tags||[]).join(", ")}</div>
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <button onClick={()=>setEditing(b)} className="px-3 py-1.5 rounded-lg border text-sm">Edit</button>
+              <button onClick={()=>remove(b._id)} className="px-3 py-1.5 rounded-lg border text-sm text-red-600">Delete</button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/* ---------------- Admin: Banners ---------------- */
+function AdminBanners(){
+  const [banners, setBanners] = useState([]);
+  const [editing, setEditing] = useState(null);
+  const empty = { title:"", subtitle:"", image:"🌙", link:"#", bgColor:"#0f766e", active:true, order:0 };
+
+  const load = async ()=>{
+    const list = await api("/api/banners");
+    if(list) setBanners(list);
+    else setBanners(JSON.parse(localStorage.getItem("rishta_banners")||"[]"));
+  };
+  useEffect(()=>{ load(); },[]);
+
+  const save = async ()=>{
+    if(!editing.title){ alert("Title required"); return; }
+    if(editing._id){
+      const r = await api("/api/admin/banners/"+editing._id, { method:"PUT", body: editing });
+      if(!r) {
+        const local = JSON.parse(localStorage.getItem("rishta_banners")||"[]");
+        const idx = local.findIndex(b=>b._id===editing._id);
+        if(idx>=0) local[idx] = editing;
+        localStorage.setItem("rishta_banners", JSON.stringify(local));
+      }
+    } else {
+      const r = await api("/api/admin/banners", { method:"POST", body: editing });
+      if(!r) {
+        const local = JSON.parse(localStorage.getItem("rishta_banners")||"[]");
+        local.push({ ...editing, _id:"local-"+Date.now() });
+        localStorage.setItem("rishta_banners", JSON.stringify(local));
+      }
+    }
+    setEditing(null); load();
+  };
+  const remove = async (id)=>{
+    if(!confirm("Delete banner?")) return;
+    const r = await api("/api/admin/banners/"+id, { method:"DELETE" });
+    if(!r) {
+      const local = JSON.parse(localStorage.getItem("rishta_banners")||"[]");
+      localStorage.setItem("rishta_banners", JSON.stringify(local.filter(b=>b._id!==id)));
+    }
+    load();
+  };
+
+  if(editing) return (
+    <div className="mt-3 space-y-3">
+      <div className="font-semibold text-lg">{editing._id?"Edit Banner":"New Banner"}</div>
+      <input className="inp" placeholder="Title" value={editing.title} onChange={e=>setEditing({...editing, title:e.target.value})}/>
+      <input className="inp" placeholder="Subtitle" value={editing.subtitle} onChange={e=>setEditing({...editing, subtitle:e.target.value})}/>
+      <input className="inp" placeholder="Image emoji or URL" value={editing.image} onChange={e=>setEditing({...editing, image:e.target.value})}/>
+      <input className="inp" placeholder="Link (e.g. #signup, /matches)" value={editing.link} onChange={e=>setEditing({...editing, link:e.target.value})}/>
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="Background Color"><input type="color" className="inp" value={editing.bgColor} onChange={e=>setEditing({...editing, bgColor:e.target.value})}/></Field>
+        <Field label="Display Order"><input type="number" className="inp" value={editing.order} onChange={e=>setEditing({...editing, order:+e.target.value})}/></Field>
+      </div>
+      <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={editing.active} onChange={e=>setEditing({...editing, active:e.target.checked})}/> Active (show on homepage)</label>
+      <div className="rounded-xl p-4 text-white" style={{background:editing.bgColor}}>
+        <div className="text-2xl">{editing.image}</div>
+        <div className="font-display text-xl">{editing.title}</div>
+        <div className="text-sm opacity-80">{editing.subtitle}</div>
+      </div>
+      <div className="flex gap-2">
+        <button onClick={save} className="btn-primary px-4 py-2 rounded-xl">Save Banner</button>
+        <button onClick={()=>setEditing(null)} className="px-4 py-2 rounded-xl border">Cancel</button>
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="mt-3">
+      <button onClick={()=>setEditing({...empty})} className="btn-primary px-4 py-2 rounded-xl mb-3">+ New Banner</button>
+      <div className="space-y-2">
+        {banners.length===0 && <div className="text-gray-500 italic">No banners. Add one to feature on homepage.</div>}
+        {banners.map(b=>(
+          <div key={b._id} className="rounded-xl border overflow-hidden">
+            <div className="p-3 text-white flex items-center justify-between" style={{background:b.bgColor||"#0f766e"}}>
+              <div className="flex items-center gap-3">
+                <div className="text-3xl">{b.image||"🌙"}</div>
+                <div>
+                  <div className="font-display">{b.title}</div>
+                  <div className="text-sm opacity-80">{b.subtitle}</div>
+                </div>
+              </div>
+              <div className="text-xs">{b.active?"● Active":"○ Inactive"} • Order {b.order||0}</div>
+            </div>
+            <div className="p-2 bg-white flex gap-2 justify-end">
+              <button onClick={()=>setEditing(b)} className="px-3 py-1.5 rounded-lg border text-sm">Edit</button>
+              <button onClick={()=>remove(b._id)} className="px-3 py-1.5 rounded-lg border text-sm text-red-600">Delete</button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/* ---------------- Admin: Contact Messages ---------------- */
+function AdminContacts(){
+  const [contacts, setContacts] = useState([]);
+  const [active, setActive] = useState(null);
+
+  const load = async ()=>{
+    const list = await api("/api/admin/contacts");
+    if(list) setContacts(list);
+    else setContacts(JSON.parse(localStorage.getItem("rishta_contacts")||"[]"));
+  };
+  useEffect(()=>{ load(); },[]);
+
+  const markRead = async (id, status="read")=>{
+    const r = await api("/api/admin/contacts/"+id, { method:"PUT", body:{ status }});
+    if(!r) {
+      const local = JSON.parse(localStorage.getItem("rishta_contacts")||"[]");
+      const idx = local.findIndex(c=>c._id===id);
+      if(idx>=0) local[idx].status = status;
+      localStorage.setItem("rishta_contacts", JSON.stringify(local));
+    }
+    load();
+  };
+  const remove = async (id)=>{
+    if(!confirm("Delete this message?")) return;
+    const r = await api("/api/admin/contacts/"+id, { method:"DELETE" });
+    if(!r) {
+      const local = JSON.parse(localStorage.getItem("rishta_contacts")||"[]");
+      localStorage.setItem("rishta_contacts", JSON.stringify(local.filter(c=>c._id!==id)));
+    }
+    load();
+  };
+
+  return (
+    <div className="mt-3">
+      <div className="text-sm text-gray-500 mb-3">{contacts.length} total • {contacts.filter(c=>c.status==="new").length} new</div>
+      <div className="space-y-2">
+        {contacts.length===0 && <div className="text-gray-500 italic">No messages yet. They will appear here when visitors submit the contact form.</div>}
+        {contacts.map(c=>(
+          <div key={c._id} className={"p-3 rounded-xl border "+(c.status==="new"?"bg-emerald-50 border-emerald-200":"bg-white")}>
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="font-semibold">{c.name} <span className="text-xs text-gray-500">&lt;{c.email}&gt;</span></div>
+                <div className="text-xs text-gray-500">{c.phone} • {new Date(c.createdAt).toLocaleString()}</div>
+                {c.subject && <div className="text-sm font-medium mt-1">Subject: {c.subject}</div>}
+              </div>
+              <span className={"chip "+(c.status==="new"?"badge-verified":"bg-gray-100 text-gray-700")}>{c.status||"new"}</span>
+            </div>
+            <div className="mt-2 text-sm text-gray-700 whitespace-pre-line">{c.message}</div>
+            <div className="mt-2 flex gap-2 flex-wrap">
+              <a href={"mailto:"+c.email+"?subject=Re: "+(c.subject||"Your message to RishtaConnect")} className="px-3 py-1.5 rounded-lg border text-sm">📧 Reply</a>
+              {c.status==="new" && <button onClick={()=>markRead(c._id,"read")} className="px-3 py-1.5 rounded-lg border text-sm">Mark Read</button>}
+              {c.status!=="archived" && <button onClick={()=>markRead(c._id,"archived")} className="px-3 py-1.5 rounded-lg border text-sm">Archive</button>}
+              <button onClick={()=>remove(c._id)} className="px-3 py-1.5 rounded-lg border text-sm text-red-600">Delete</button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/* ---------------- Admin: Site Settings ---------------- */
+function AdminSettings(){
+  const [s, setS] = useState({ siteName:"RishtaConnect", tagline:"", primaryColor:"#0f766e",
+    contactEmail:"", contactPhone:"", whatsapp:"", address:"",
+    facebook:"", instagram:"", twitter:"", youtube:"", footerText:"",
+    maintenanceMode:false, signupEnabled:true });
+  const [saved, setSaved] = useState(false);
+
+  useEffect(()=>{ (async ()=>{
+    const cur = await api("/api/settings");
+    if(cur) setS(prev=>({...prev, ...cur}));
+    else {
+      const local = JSON.parse(localStorage.getItem("rishta_settings")||"null");
+      if(local) setS(prev=>({...prev, ...local}));
+    }
+  })(); },[]);
+
+  const save = async ()=>{
+    const r = await api("/api/admin/settings", { method:"PUT", body: s });
+    if(!r) localStorage.setItem("rishta_settings", JSON.stringify(s));
+    setSaved(true);
+    setTimeout(()=>setSaved(false), 2500);
+  };
+
+  return (
+    <div className="mt-3 space-y-3">
+      <div className="grid md:grid-cols-2 gap-3">
+        <Field label="Site Name"><input className="inp" value={s.siteName} onChange={e=>setS({...s, siteName:e.target.value})}/></Field>
+        <Field label="Tagline"><input className="inp" value={s.tagline} onChange={e=>setS({...s, tagline:e.target.value})}/></Field>
+        <Field label="Primary Brand Color"><input type="color" className="inp" value={s.primaryColor} onChange={e=>setS({...s, primaryColor:e.target.value})}/></Field>
+        <Field label="Logo (emoji or URL)"><input className="inp" value={s.logo||""} onChange={e=>setS({...s, logo:e.target.value})}/></Field>
+      </div>
+      <div className="font-semibold mt-2">Contact Information</div>
+      <div className="grid md:grid-cols-2 gap-3">
+        <Field label="Contact Email"><input className="inp" value={s.contactEmail} onChange={e=>setS({...s, contactEmail:e.target.value})}/></Field>
+        <Field label="Contact Phone"><input className="inp" value={s.contactPhone} onChange={e=>setS({...s, contactPhone:e.target.value})}/></Field>
+        <Field label="WhatsApp"><input className="inp" value={s.whatsapp} onChange={e=>setS({...s, whatsapp:e.target.value})}/></Field>
+        <Field label="Address"><input className="inp" value={s.address} onChange={e=>setS({...s, address:e.target.value})}/></Field>
+      </div>
+      <div className="font-semibold mt-2">Social Links</div>
+      <div className="grid md:grid-cols-2 gap-3">
+        <Field label="Facebook URL"><input className="inp" value={s.facebook} onChange={e=>setS({...s, facebook:e.target.value})}/></Field>
+        <Field label="Instagram URL"><input className="inp" value={s.instagram} onChange={e=>setS({...s, instagram:e.target.value})}/></Field>
+        <Field label="Twitter URL"><input className="inp" value={s.twitter} onChange={e=>setS({...s, twitter:e.target.value})}/></Field>
+        <Field label="YouTube URL"><input className="inp" value={s.youtube} onChange={e=>setS({...s, youtube:e.target.value})}/></Field>
+      </div>
+      <div className="font-semibold mt-2">Advanced</div>
+      <Field label="Footer Text"><input className="inp" value={s.footerText} onChange={e=>setS({...s, footerText:e.target.value})}/></Field>
+      <div className="flex flex-wrap gap-4">
+        <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={s.maintenanceMode} onChange={e=>setS({...s, maintenanceMode:e.target.checked})}/> Maintenance Mode</label>
+        <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={s.signupEnabled} onChange={e=>setS({...s, signupEnabled:e.target.checked})}/> Signup Enabled</label>
+      </div>
+      <div className="flex items-center gap-3 mt-3">
+        <button onClick={save} className="btn-primary px-5 py-2 rounded-xl">Save Settings</button>
+        {saved && <span className="text-emerald-600 text-sm">✓ Settings saved</span>}
+      </div>
+    </div>
+  );
+}
+function Stat2({label,value}){
+  return (
+    <div className="bg-cream rounded-2xl p-3 border">
+      <div className="text-xs text-gray-500">{label}</div>
+      <div className="font-bold text-lg">{value}</div>
+    </div>
+  );
+}
+
+/* ---------------- App Root ---------------- */
+function App(){
+  const [lang, setLang] = useState("en");
+  const t = (k)=> STRINGS[lang][k]||k;
+  const [view, setView] = useState("landing");
+  const [authMode, setAuthMode] = useState("signup");
+  const [user, setUser] = useState(null);
+  const [users, setUsers] = useState(SEED_USERS);
+  const [activeProfile, setActiveProfile] = useState(null);
+  const [messages, setMessages] = useState(SEED_MESSAGES);
+  const [unreadMsgs, setUnreadMsgs] = useState(0);
+  const [unreadNotifs, setUnreadNotifs] = useState(2);
+  const [notifList, setNotifList] = useState([]);
+
+  // Demo: simulate occasional new notifications/messages with sound
+  useEffect(()=>{
+    if(!user) return;
+    const t = setInterval(()=>{
+      // ~once every 25 seconds add a demo notification (only if not on chat/notifications)
+      if(Math.random() > 0.7 && view !== "chat" && view !== "notifications"){
+        if(Math.random() > 0.5){
+          setUnreadMsgs(n=>n+1);
+          playChime();
+        } else {
+          setUnreadNotifs(n=>n+1);
+          playChime();
+        }
+      }
+    }, 25000);
+    return ()=>clearInterval(t);
+  },[user, view]);
+
+  // Clear unread when entering respective view
+  useEffect(()=>{
+    if(view==="chat") setUnreadMsgs(0);
+    if(view==="notifications") setUnreadNotifs(0);
+  },[view]);
+
+  // Persist
+  useEffect(()=>{
+    try{
+      const saved = JSON.parse(localStorage.getItem("rishta_state")||"null");
+      if(saved){
+        setUser(saved.user||null);
+        setUsers(saved.users||SEED_USERS);
+        setMessages(saved.messages||SEED_MESSAGES);
+        if(saved.user) setView("home");
+      }
+    }catch(e){}
+  },[]);
+  useEffect(()=>{
+    try{ localStorage.setItem("rishta_state", JSON.stringify({user,users,messages})); }catch(e){}
+  },[user,users,messages]);
+
+  const onAuth = async (form, mode)=>{
+    // Try backend first
+    const path = mode==="login" ? "/api/auth/login" : "/api/auth/signup";
+    const res = await api(path, { method:"POST", body: form });
+    if(res?.token){
+      localStorage.setItem("rishta_token", res.token);
+      const u = { ...res.user, id: res.user._id || res.user.id };
+      setUser(u);
+      if (u.role === "admin") {
+        location.hash = "#/admin/dashboard";
+        setView("admin");
+      } else {
+        setView(mode==="login" ? "home" : "setup");
+      }
+      return;
+    }
+    // Fallback: local-only mode
+    const u = {
+      id: uid(), name: form.name||"New User", email:form.email, phone:form.phone,
+      gender: form.gender, age:"", city:"Lahore", country:"Pakistan", religion:"Islam",
+      sect:"Sunni", profession:"", trustScore:60, plan:"Free",
+      verifications:{ phone:true, email:true, cnic:false, face:false, family:false, business:false },
+      preferences:{}, photos:[], blurPhoto:true, languages:["Urdu","English"], timeline:"Just exploring"
+    };
+    setUser(u);
+    setView(mode==="login" ? "home" : "setup");
+  };
+
+  const sendMessage = (toId, text)=>{
+    const key = [user.id, toId].sort().join("-");
+    const time = new Date().toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"});
+    setMessages(m=>({...m, [key]:[...(m[key]||[]), { from:user.id, text, time }]}));
+    // Simulate a reply after 2-4 seconds (demo)
+    setTimeout(()=>{
+      const replies = ["JazakAllah for your message.", "Walaikum Assalam.", "I will check with my family in sha Allah.", "Could you share more about yourself?"];
+      const reply = replies[Math.floor(Math.random()*replies.length)];
+      setMessages(m=>({...m, [key]:[...(m[key]||[]), { from:toId, text:reply, time:new Date().toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"}) }]}));
+      if (view !== "chat") { setUnreadMsgs(n=>n+1); playChime(); }
+    }, 2000 + Math.random()*2000);
+  };
+
+  const isAuthed = !!user;
+  const onLogout = ()=>{ localStorage.removeItem("rishta_token"); setUser(null); setView("landing"); location.hash=""; };
+
+  // Admin route: when admin user navigates to "admin" view OR hash starts with #/admin
+  const [hash, setHash] = useState(location.hash);
+  useEffect(()=>{
+    const h = ()=> setHash(location.hash);
+    window.addEventListener("hashchange", h);
+    return ()=>window.removeEventListener("hashchange", h);
+  },[]);
+
+  const isAdminRoute = hash.startsWith("#/admin") || view==="admin";
+  if (isAuthed && user.role === "admin" && isAdminRoute) {
+    return (
+      <I18nCtx.Provider value={{ lang, setLang, t }}>
+        <AdminLayout user={user} onLogout={onLogout} onExit={()=>{ location.hash=""; setView("home"); }}/>
+      </I18nCtx.Provider>
+    );
+  }
+
+  return (
+    <I18nCtx.Provider value={{ lang, setLang, t }}>
+      <div className="min-h-screen pb-16 bg-cream">
+        {view!=="landing" && view!=="login" && view!=="signup" && isAuthed && (
+          <TopBar user={user} onNav={setView} lang={lang} setLang={setLang} view={view} unreadMsgs={unreadMsgs} unreadNotifs={unreadNotifs}/>
+        )}
+
+        {view==="landing" && (
+          <Landing onStart={()=>{setAuthMode("signup"); setView("signup");}}
+                   onLogin={()=>{setAuthMode("login"); setView("login");}}/>
+        )}
+        {(view==="signup"||view==="login") && (
+          <AuthScreen mode={view} onAuth={onAuth} onSwitch={setView}/>
+        )}
+        {view==="setup" && user && (
+          <ProfileSetup initial={user} onSave={(d)=>{
+            // Detect sensitive field changes
+            const sensitive = ["name","age","income","city","maritalStatus","phone","photos"];
+            const changes = {};
+            sensitive.forEach(k=>{
+              if(d[k] !== undefined && user[k] !== d[k] && user[k] !== "") {
+                changes[k] = { old:user[k], new:d[k] };
+              }
+            });
+            // Update non-sensitive fields immediately
+            const directUpdates = {...d};
+            sensitive.forEach(k=>{ if(changes[k]) delete directUpdates[k]; });
+            const next = {...user, ...directUpdates};
+
+            // If sensitive changes exist, put them in pending review
+            if(Object.keys(changes).length){
+              const pending = { id:Date.now(), userId:user.id, changes, time:new Date().toISOString(), status:"pending" };
+              localStorage.setItem("rishta_pending_edit_"+user.id, JSON.stringify(pending));
+              // Also push to history
+              const hist = JSON.parse(localStorage.getItem("rishta_edit_history_"+user.id)||"[]");
+              hist.unshift({ ...pending, snapshot: { name:user.name, age:user.age, city:user.city, income:user.income, photos:user.photos } });
+              localStorage.setItem("rishta_edit_history_"+user.id, JSON.stringify(hist));
+              alert("✓ Changes saved!\n\nNote: Sensitive fields ("+Object.keys(changes).join(", ")+") have been sent to admin for review. They will go live after approval.");
+            } else {
+              alert("✓ Profile updated successfully!");
+            }
+            setUser(next); setView("home");
+          }} onCancel={()=>setView("home")}/>
+        )}
+        {view==="home" && user && (
+          <Home user={user} users={users} onNav={setView} onOpen={(u)=>setActiveProfile(u)}/>
+        )}
+        {view==="search" && user && (
+          <SearchView user={user} users={users} onOpen={(u)=>setActiveProfile(u)}/>
+        )}
+        {view==="matches" && user && (
+          <Matches user={user} users={users} onOpen={(u)=>setActiveProfile(u)}/>
+        )}
+        {view==="chat" && user && (
+          <ChatView user={user} users={users} messages={messages} sendMessage={sendMessage}/>
+        )}
+        {view==="profile" && user && (
+          <MyProfile user={user} setUser={setUser} onLogout={onLogout} onEdit={()=>setView("setup")} onNav={setView}/>
+        )}
+        {view==="verify" && user && (
+          <VerificationView user={user} setUser={setUser}/>
+        )}
+        {view==="subscription" && user && (
+          <Subscription user={user} setUser={setUser}/>
+        )}
+        {view==="family" && user && <Family user={user}/>}
+        {view==="notifications" && user && <Notifications/>}
+        {view==="editHistory" && user && <EditHistory user={user}/>}
+        {view==="matchmakers" && user && <MatchmakersMarketplace user={user}/>}
+        {view==="meetings" && user && <Meetings user={user}/>}
+        {view==="matchmakerDashboard" && user && <MatchmakerDashboard user={user}/>}
+        {view==="admin" && user && <AdminPanel users={users} setUsers={setUsers}/>}
+
+        {activeProfile && user && (() => {
+          // Track viewed profiles for premium preview
+          const viewed = JSON.parse(localStorage.getItem("rishta_viewed_profiles")||"[]");
+          const pid = activeProfile.id || activeProfile._id;
+          if (!viewed.includes(pid)) {
+            viewed.push(pid);
+            localStorage.setItem("rishta_viewed_profiles", JSON.stringify(viewed));
+          }
+          return (
+            <ProfileDetail u={activeProfile} user={user}
+              onClose={()=>setActiveProfile(null)}
+              onChat={()=>{ setActiveProfile(null); setView("chat"); }}
+              onInterest={()=>{ alert("Interest sent to "+activeProfile.name+"! In sha Allah."); setActiveProfile(null); }}
+            />
+          );
+        })()}
+
+        {isAuthed && view!=="landing" && view!=="setup" && view!=="login" && view!=="signup" && (
+          <BottomNav view={view} onNav={setView} unreadMsgs={unreadMsgs} unreadNotifs={unreadNotifs}/>
+        )}
+      </div>
+      <style>{`.inp{width:100%;padding:.6rem .85rem;border-radius:.75rem;border:1px solid #e5e7eb;background:#fff;font-size:.9rem}`}</style>
+    </I18nCtx.Provider>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
+</body>
+</html>

@@ -1,0 +1,623 @@
+/**
+ * RishtaConnect Backend — Production-Ready
+ *   • Node.js + Express + Socket.io
+ *   • MongoDB Atlas (auto-falls back to JSON file if MONGO_URI not set)
+ *   • JWT auth, bcrypt, helmet, rate limiting
+ *   • Blog / Banner / Contact / Settings management
+ *   • Free hosting friendly (Railway, Render, Fly.io)
+ */
+
+require("dotenv").config();
+const express = require("express");
+const cors = require("cors");
+const bcrypt = require("bcryptjs");
+const jwt = require("jsonwebtoken");
+const helmet = require("helmet");
+const rateLimit = require("express-rate-limit");
+const http = require("http");
+const { Server } = require("socket.io");
+const fs = require("fs");
+const path = require("path");
+const { v4: uuid } = require("uuid");
+const mongoose = require("mongoose");
+
+const app = express();
+const server = http.createServer(app);
+const io = new Server(server, { cors: { origin: "*" } });
+
+const PORT = process.env.PORT || 4000;
+const JWT_SECRET = process.env.JWT_SECRET || "rishta-dev-secret-change-in-prod";
+const MONGO_URI = process.env.MONGO_URI || "";
+
+app.use(helmet({ contentSecurityPolicy: false }));
+app.use(cors({ origin: "*" }));
+app.use(express.json({ limit: "10mb" }));
+app.use(rateLimit({ windowMs: 60 * 1000, max: 300 }));
+
+/* ==================== DATABASE LAYER ==================== */
+// Mode: MongoDB if MONGO_URI is set, else JSON file
+const USE_MONGO = !!MONGO_URI;
+let mongoReady = false;
+const DB_PATH = path.join(__dirname, "db.json");
+
+const collections = ["users", "blogs", "banners", "contacts", "settings", "interests", "reports", "pendingEdits", "subscriptions", "activityLogs"];
+const messagesKey = "messages";
+
+/* ---- Mongoose Schemas ---- */
+const UserSchema = new mongoose.Schema({
+  _id: { type: String, default: uuid },
+  name: String, email: { type: String, unique: true, sparse: true }, phone: String,
+  password: String, gender: String, age: Number, role: { type: String, default: "user" },
+  height: String, maritalStatus: String, city: String, country: String, nationality: String,
+  religion: { type: String, default: "Islam" }, sect: String, languages: [String],
+  qualification: String, university: String, profession: String, company: String, business: String,
+  income: String, jobType: String, overseas: Boolean,
+  fatherProfession: String, motherProfession: String, siblings: String,
+  familyType: String, ownHouse: Boolean, familyBackground: String,
+  namaz: String, hijab: String, religiousLevel: String,
+  nature: String, hobbies: [String], smoking: String, futureGoals: String,
+  preferences: Object, photos: [String], blurPhoto: Boolean, bio: String, timeline: String,
+  verifications: { phone: Boolean, email: Boolean, cnic: Boolean, face: Boolean, family: Boolean, business: Boolean },
+  trustScore: { type: Number, default: 60 }, plan: { type: String, default: "Free" }, planExpires: Date,
+  cnic: String, deviceId: String, banned: Boolean, flagged: Boolean,
+  lastActive: { type: Date, default: Date.now }, createdAt: { type: Date, default: Date.now }
+}, { _id: false });
+
+const BlogSchema = new mongoose.Schema({
+  _id: { type: String, default: uuid },
+  title: String, slug: String, excerpt: String, content: String, coverImage: String,
+  author: String, tags: [String], published: { type: Boolean, default: true },
+  createdAt: { type: Date, default: Date.now }, updatedAt: { type: Date, default: Date.now }
+}, { _id: false });
+
+const BannerSchema = new mongoose.Schema({
+  _id: { type: String, default: uuid },
+  title: String, subtitle: String, image: String, link: String,
+  bgColor: { type: String, default: "#0f766e" },
+  active: { type: Boolean, default: true }, order: { type: Number, default: 0 },
+  createdAt: { type: Date, default: Date.now }
+}, { _id: false });
+
+const ContactSchema = new mongoose.Schema({
+  _id: { type: String, default: uuid },
+  name: String, email: String, phone: String, subject: String, message: String,
+  status: { type: String, default: "new" }, // new, read, replied, archived
+  reply: String, createdAt: { type: Date, default: Date.now }
+}, { _id: false });
+
+const SettingsSchema = new mongoose.Schema({
+  _id: { type: String, default: "site" },
+  siteName: { type: String, default: "RishtaConnect" },
+  tagline: String, logo: String, primaryColor: { type: String, default: "#0f766e" },
+  contactEmail: String, contactPhone: String, address: String,
+  whatsapp: String, facebook: String, instagram: String, twitter: String, youtube: String,
+  footerText: String, maintenanceMode: { type: Boolean, default: false },
+  signupEnabled: { type: Boolean, default: true },
+  updatedAt: { type: Date, default: Date.now }
+}, { _id: false });
+
+const MessageSchema = new mongoose.Schema({
+  _id: { type: String, default: uuid },
+  threadKey: { type: String, index: true },
+  from: String, to: String, text: String, time: { type: Date, default: Date.now }
+}, { _id: false });
+
+const SimpleSchema = (name) => new mongoose.Schema({}, { strict: false, collection: name });
+
+let M = {};
+function buildModels() {
+  M.User = mongoose.model("User", UserSchema);
+  M.Blog = mongoose.model("Blog", BlogSchema);
+  M.Banner = mongoose.model("Banner", BannerSchema);
+  M.Contact = mongoose.model("Contact", ContactSchema);
+  M.Settings = mongoose.model("Settings", SettingsSchema);
+  M.Message = mongoose.model("Message", MessageSchema);
+  M.Interest = mongoose.model("Interest", SimpleSchema("interests"));
+  M.Report = mongoose.model("Report", SimpleSchema("reports"));
+  M.PendingEdit = mongoose.model("PendingEdit", SimpleSchema("pendingEdits"));
+  M.Subscription = mongoose.model("Subscription", SimpleSchema("subscriptions"));
+  M.ActivityLog = mongoose.model("ActivityLog", SimpleSchema("activityLogs"));
+}
+
+/* ---- JSON file fallback ---- */
+function loadJSONDB() {
+  if (!fs.existsSync(DB_PATH)) {
+    const seed = { users: [], blogs: [], banners: [], contacts: [], settings: [{ _id: "site", siteName: "RishtaConnect" }], messages: {}, interests: [], reports: [], pendingEdits: [], subscriptions: [], activityLogs: [] };
+    fs.writeFileSync(DB_PATH, JSON.stringify(seed, null, 2));
+  }
+  return JSON.parse(fs.readFileSync(DB_PATH, "utf-8"));
+}
+function saveJSONDB(db) { fs.writeFileSync(DB_PATH, JSON.stringify(db, null, 2)); }
+
+/* ---- Unified DB API (works for both Mongo & JSON) ---- */
+const db = {
+  async find(col, filter = {}) {
+    if (USE_MONGO && mongoReady) {
+      const Model = mongoModelFor(col);
+      return Model.find(filter).lean();
+    }
+    const data = loadJSONDB();
+    return (data[col] || []).filter(item => Object.entries(filter).every(([k, v]) => item[k] === v));
+  },
+  async findOne(col, filter) {
+    if (USE_MONGO && mongoReady) return mongoModelFor(col).findOne(filter).lean();
+    const data = loadJSONDB();
+    return (data[col] || []).find(item => Object.entries(filter).every(([k, v]) => item[k] === v));
+  },
+  async insert(col, doc) {
+    if (USE_MONGO && mongoReady) {
+      const created = await mongoModelFor(col).create(doc);
+      return created.toObject ? created.toObject() : created;
+    }
+    const data = loadJSONDB();
+    data[col] = data[col] || [];
+    if (!doc._id && !doc.id) doc._id = uuid();
+    data[col].push(doc);
+    saveJSONDB(data);
+    return doc;
+  },
+  async update(col, filter, patch) {
+    if (USE_MONGO && mongoReady) return mongoModelFor(col).updateOne(filter, { $set: patch });
+    const data = loadJSONDB();
+    let updated = 0;
+    data[col] = (data[col] || []).map(item => {
+      const match = Object.entries(filter).every(([k, v]) => item[k] === v);
+      if (match) { updated++; return { ...item, ...patch }; }
+      return item;
+    });
+    saveJSONDB(data);
+    return { updated };
+  },
+  async remove(col, filter) {
+    if (USE_MONGO && mongoReady) return mongoModelFor(col).deleteOne(filter);
+    const data = loadJSONDB();
+    data[col] = (data[col] || []).filter(item => !Object.entries(filter).every(([k, v]) => item[k] === v));
+    saveJSONDB(data);
+    return { ok: true };
+  },
+  // Messages stored as flat list in Mongo, as object in JSON
+  async findMessages(threadKey) {
+    if (USE_MONGO && mongoReady) return M.Message.find({ threadKey }).sort({ time: 1 }).lean();
+    const data = loadJSONDB();
+    return (data.messages && data.messages[threadKey]) || [];
+  },
+  async addMessage(threadKey, msg) {
+    if (USE_MONGO && mongoReady) {
+      const created = await M.Message.create({ ...msg, threadKey });
+      return created.toObject();
+    }
+    const data = loadJSONDB();
+    data.messages = data.messages || {};
+    data.messages[threadKey] = [...(data.messages[threadKey] || []), msg];
+    saveJSONDB(data);
+    return msg;
+  }
+};
+
+function mongoModelFor(col) {
+  const map = {
+    users: M.User, blogs: M.Blog, banners: M.Banner, contacts: M.Contact,
+    settings: M.Settings, interests: M.Interest, reports: M.Report,
+    pendingEdits: M.PendingEdit, subscriptions: M.Subscription,
+    activityLogs: M.ActivityLog, messages: M.Message
+  };
+  return map[col];
+}
+
+/* ---- Connect to MongoDB ---- */
+async function connectMongo() {
+  if (!USE_MONGO) {
+    console.log("ℹ  MONGO_URI not set — using JSON file database (db.json)");
+    return;
+  }
+  try {
+    await mongoose.connect(MONGO_URI);
+    buildModels();
+    mongoReady = true;
+    console.log("✓ Connected to MongoDB Atlas");
+  } catch (e) {
+    console.log("✗ MongoDB connection failed, falling back to JSON file. Error:", e.message);
+  }
+}
+
+/* ==================== HELPERS ==================== */
+function auth(req, res, next) {
+  const token = req.headers.authorization?.split(" ")[1];
+  if (!token) return res.status(401).json({ error: "No token" });
+  try { req.user = jwt.verify(token, JWT_SECRET); next(); }
+  catch (e) { res.status(401).json({ error: "Invalid token" }); }
+}
+function adminOnly(req, res, next) {
+  if (req.user?.role !== "admin") return res.status(403).json({ error: "Admin only" });
+  next();
+}
+function detectFraud(users, user) {
+  const flags = [];
+  const sameCnic = users.filter(u => u.cnic && u.cnic === user.cnic && (u._id || u.id) !== (user._id || user.id));
+  if (sameCnic.length) flags.push({ type: "duplicate_cnic", count: sameCnic.length });
+  const sameDevice = users.filter(u => u.deviceId && u.deviceId === user.deviceId && (u._id || u.id) !== (user._id || user.id));
+  if (sameDevice.length >= 2) flags.push({ type: "multi_account_device", count: sameDevice.length });
+  return flags;
+}
+function computeTrustScore(user) {
+  let s = 50; const v = user.verifications || {};
+  if (v.cnic) s += 20; if (v.face) s += 20; if (v.family) s += 15;
+  if (v.business) s += 10; if (v.phone) s += 5; if (v.email) s += 5;
+  if (user.reports > 0) s -= 50 * user.reports;
+  return Math.max(0, Math.min(100, s));
+}
+function compatibility(a, b) {
+  let s = 50;
+  if (a.sect === b.sect) s += 10;
+  if (a.country === b.country) s += 8;
+  if (a.city === b.city) s += 6;
+  if (a.religiousLevel === b.religiousLevel) s += 8;
+  if (a.familyType === b.familyType) s += 6;
+  const overlap = (a.languages || []).filter(x => (b.languages || []).includes(x)).length;
+  s += Math.min(overlap * 3, 9);
+  return Math.max(40, Math.min(99, s + Math.floor((b.trustScore || 80) / 20)));
+}
+function sanitize(u) {
+  if (!u) return u;
+  const { password, ...rest } = u;
+  return rest;
+}
+
+/* ==================== AUTH ==================== */
+app.post("/api/auth/signup", async (req, res) => {
+  try {
+    const { name, email, phone, password, gender } = req.body;
+    if (!email || !password) return res.status(400).json({ error: "Email & password required" });
+    const exists = await db.findOne("users", { email });
+    if (exists) return res.status(400).json({ error: "Email already registered" });
+    const hash = await bcrypt.hash(password, 10);
+    const user = {
+      _id: uuid(), name, email, phone, password: hash, gender,
+      role: "user", plan: "Free", trustScore: 60, photos: [], blurPhoto: true,
+      verifications: { phone: false, email: false, cnic: false, face: false, family: false, business: false },
+      preferences: {}, languages: ["Urdu", "English"], religion: "Islam", sect: "Sunni",
+      createdAt: new Date(), lastActive: new Date()
+    };
+    await db.insert("users", user);
+    const token = jwt.sign({ id: user._id, role: user.role }, JWT_SECRET, { expiresIn: "7d" });
+    res.json({ token, user: sanitize(user) });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post("/api/auth/login", async (req, res) => {
+  try {
+    const { email, password } = req.body;
+    const user = await db.findOne("users", { email });
+    if (!user) return res.status(400).json({ error: "Invalid credentials" });
+    const ok = await bcrypt.compare(password, user.password || "");
+    if (!ok) return res.status(400).json({ error: "Invalid credentials" });
+    if (user.banned) return res.status(403).json({ error: "Account banned" });
+    await db.update("users", { _id: user._id || user.id }, { lastActive: new Date() });
+    const token = jwt.sign({ id: user._id || user.id, role: user.role }, JWT_SECRET, { expiresIn: "7d" });
+    res.json({ token, user: sanitize(user) });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post("/api/auth/otp/send", (req, res) => res.json({ ok: true, demoOtp: "123456" }));
+app.post("/api/auth/otp/verify", (req, res) => res.json({ ok: req.body.otp === "123456" }));
+
+/* ==================== PROFILE ==================== */
+app.get("/api/me", auth, async (req, res) => {
+  const user = await db.findOne("users", { _id: req.user.id });
+  if (!user) return res.status(404).json({ error: "Not found" });
+  res.json(sanitize(user));
+});
+
+app.put("/api/me", auth, async (req, res) => {
+  const user = await db.findOne("users", { _id: req.user.id });
+  if (!user) return res.status(404).json({ error: "Not found" });
+
+  const sensitive = ["name", "age", "income", "city", "maritalStatus", "phone", "photos"];
+  const changes = {};
+  const directUpdates = {};
+  Object.keys(req.body).forEach(k => {
+    if (sensitive.includes(k) && user[k] !== req.body[k]) {
+      changes[k] = { old: user[k], new: req.body[k] };
+    } else if (k !== "_id" && k !== "id" && k !== "password" && k !== "role") {
+      directUpdates[k] = req.body[k];
+    }
+  });
+
+  if (Object.keys(changes).length) {
+    await db.insert("pendingEdits", {
+      _id: uuid(), userId: req.user.id, changes,
+      status: "pending", createdAt: new Date()
+    });
+  }
+  directUpdates.trustScore = computeTrustScore({ ...user, ...directUpdates });
+  await db.update("users", { _id: req.user.id }, directUpdates);
+
+  const updated = await db.findOne("users", { _id: req.user.id });
+  res.json({
+    user: sanitize(updated),
+    pendingChanges: Object.keys(changes).length,
+    message: Object.keys(changes).length ? "Sensitive changes are pending admin review." : "Profile updated."
+  });
+});
+
+/* ==================== SEARCH / MATCH ==================== */
+app.get("/api/users", auth, async (req, res) => {
+  const me = await db.findOne("users", { _id: req.user.id });
+  const allUsers = await db.find("users", {});
+  let list = allUsers.filter(u => (u._id || u.id) !== (me._id || me.id) && u.gender !== me.gender && !u.banned);
+
+  const { city, country, profession, sect, verified, overseas, minAge, maxAge, q } = req.query;
+  if (city) list = list.filter(u => u.city === city);
+  if (country) list = list.filter(u => u.country === country);
+  if (profession) list = list.filter(u => u.profession === profession);
+  if (sect) list = list.filter(u => u.sect === sect);
+  if (verified === "true") list = list.filter(u => u.verifications?.cnic);
+  if (overseas === "true") list = list.filter(u => u.overseas);
+  if (minAge) list = list.filter(u => u.age >= +minAge);
+  if (maxAge) list = list.filter(u => u.age <= +maxAge);
+  if (q) {
+    const qq = q.toLowerCase();
+    list = list.filter(u => ((u.name || "") + (u.city || "") + (u.profession || "")).toLowerCase().includes(qq));
+  }
+
+  list = list.map(u => ({
+    ...sanitize(u),
+    email: undefined,
+    phone: me.plan === "Free" ? undefined : u.phone,
+    score: compatibility(me, u)
+  })).sort((a, b) => b.score - a.score);
+
+  if (me.plan === "Free") list = list.slice(0, 10);
+  res.json(list);
+});
+
+app.get("/api/matches", auth, async (req, res) => {
+  const me = await db.findOne("users", { _id: req.user.id });
+  const all = await db.find("users", {});
+  const list = all
+    .filter(u => (u._id || u.id) !== (me._id || me.id) && u.gender !== me.gender && !u.banned)
+    .map(u => ({ ...sanitize(u), email: undefined, phone: undefined, score: compatibility(me, u) }))
+    .sort((a, b) => b.score - a.score);
+  res.json(list);
+});
+
+/* ==================== INTEREST / CHAT ==================== */
+app.post("/api/interest/:to", auth, async (req, res) => {
+  const interest = { _id: uuid(), from: req.user.id, to: req.params.to, status: "pending", createdAt: new Date() };
+  await db.insert("interests", interest);
+  io.to(req.params.to).emit("interest", { from: req.user.id });
+  res.json({ ok: true, id: interest._id });
+});
+
+app.get("/api/messages/:other", auth, async (req, res) => {
+  const key = [req.user.id, req.params.other].sort().join("-");
+  res.json(await db.findMessages(key));
+});
+
+app.post("/api/messages/:other", auth, async (req, res) => {
+  const key = [req.user.id, req.params.other].sort().join("-");
+  const msg = { _id: uuid(), from: req.user.id, to: req.params.other, text: req.body.text, time: new Date() };
+  await db.addMessage(key, msg);
+  io.to(req.params.other).emit("message", msg);
+  res.json({ ok: true, msg });
+});
+
+/* ==================== VERIFICATION ==================== */
+app.post("/api/verify/:type", auth, async (req, res) => {
+  const user = await db.findOne("users", { _id: req.user.id });
+  const allowed = ["phone", "email", "cnic", "face", "family", "business"];
+  if (!allowed.includes(req.params.type)) return res.status(400).json({ error: "Invalid type" });
+  const verifications = { ...(user.verifications || {}), [req.params.type]: true };
+  const trustScore = computeTrustScore({ ...user, verifications });
+  await db.update("users", { _id: req.user.id }, { verifications, trustScore });
+
+  const allUsers = await db.find("users", {});
+  const fraud = detectFraud(allUsers, { ...user, ...req.body });
+  if (fraud.length) {
+    await db.update("users", { _id: req.user.id }, { flagged: true });
+    await db.insert("activityLogs", { _id: uuid(), userId: req.user.id, type: "fraud_flag", details: fraud, time: new Date() });
+  }
+  const updated = await db.findOne("users", { _id: req.user.id });
+  res.json({ user: sanitize(updated), fraudFlags: fraud });
+});
+
+/* ==================== SUBSCRIPTION ==================== */
+app.post("/api/subscribe", auth, async (req, res) => {
+  const plan = req.body.plan || "Premium";
+  await db.update("users", { _id: req.user.id }, { plan, planExpires: new Date(Date.now() + 30 * 86400 * 1000) });
+  await db.insert("subscriptions", { _id: uuid(), userId: req.user.id, plan, time: new Date() });
+  res.json({ ok: true, plan });
+});
+
+/* ==================== REPORT ==================== */
+app.post("/api/report/:user", auth, async (req, res) => {
+  await db.insert("reports", {
+    _id: uuid(), reportedUserId: req.params.user, reporterId: req.user.id,
+    reason: req.body.reason, status: "pending", createdAt: new Date()
+  });
+  res.json({ ok: true });
+});
+
+/* ==================== BLOG MANAGEMENT (Admin + Public) ==================== */
+// Public — anyone can read blogs
+app.get("/api/blogs", async (req, res) => {
+  const list = await db.find("blogs", {});
+  res.json(list.filter(b => b.published !== false).sort((a, b) =>
+    new Date(b.createdAt) - new Date(a.createdAt)
+  ));
+});
+app.get("/api/blogs/:slug", async (req, res) => {
+  const blog = await db.findOne("blogs", { slug: req.params.slug });
+  if (!blog) return res.status(404).json({ error: "Not found" });
+  res.json(blog);
+});
+// Admin
+app.post("/api/admin/blogs", auth, adminOnly, async (req, res) => {
+  const slug = (req.body.title || "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+  const blog = {
+    _id: uuid(), title: req.body.title, slug: slug + "-" + Date.now(),
+    excerpt: req.body.excerpt, content: req.body.content, coverImage: req.body.coverImage,
+    author: req.body.author || "RishtaConnect Team",
+    tags: req.body.tags || [], published: req.body.published !== false,
+    createdAt: new Date(), updatedAt: new Date()
+  };
+  await db.insert("blogs", blog);
+  res.json(blog);
+});
+app.put("/api/admin/blogs/:id", auth, adminOnly, async (req, res) => {
+  await db.update("blogs", { _id: req.params.id }, { ...req.body, updatedAt: new Date() });
+  res.json({ ok: true });
+});
+app.delete("/api/admin/blogs/:id", auth, adminOnly, async (req, res) => {
+  await db.remove("blogs", { _id: req.params.id });
+  res.json({ ok: true });
+});
+
+/* ==================== BANNER MANAGEMENT ==================== */
+app.get("/api/banners", async (req, res) => {
+  const list = await db.find("banners", {});
+  res.json(list.filter(b => b.active !== false).sort((a, b) => (a.order || 0) - (b.order || 0)));
+});
+app.post("/api/admin/banners", auth, adminOnly, async (req, res) => {
+  const banner = {
+    _id: uuid(), title: req.body.title, subtitle: req.body.subtitle,
+    image: req.body.image, link: req.body.link || "#",
+    bgColor: req.body.bgColor || "#0f766e",
+    active: req.body.active !== false, order: req.body.order || 0,
+    createdAt: new Date()
+  };
+  await db.insert("banners", banner);
+  res.json(banner);
+});
+app.put("/api/admin/banners/:id", auth, adminOnly, async (req, res) => {
+  await db.update("banners", { _id: req.params.id }, req.body);
+  res.json({ ok: true });
+});
+app.delete("/api/admin/banners/:id", auth, adminOnly, async (req, res) => {
+  await db.remove("banners", { _id: req.params.id });
+  res.json({ ok: true });
+});
+
+/* ==================== CONTACT FORM ==================== */
+// Public form submission
+app.post("/api/contact", async (req, res) => {
+  const { name, email, phone, subject, message } = req.body;
+  if (!name || !email || !message) return res.status(400).json({ error: "Required fields missing" });
+  const contact = {
+    _id: uuid(), name, email, phone, subject, message,
+    status: "new", createdAt: new Date()
+  };
+  await db.insert("contacts", contact);
+  res.json({ ok: true, message: "Thank you! We'll get back to you soon." });
+});
+// Admin inbox
+app.get("/api/admin/contacts", auth, adminOnly, async (req, res) => {
+  const list = await db.find("contacts", {});
+  res.json(list.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)));
+});
+app.put("/api/admin/contacts/:id", auth, adminOnly, async (req, res) => {
+  await db.update("contacts", { _id: req.params.id }, req.body);
+  res.json({ ok: true });
+});
+app.delete("/api/admin/contacts/:id", auth, adminOnly, async (req, res) => {
+  await db.remove("contacts", { _id: req.params.id });
+  res.json({ ok: true });
+});
+
+/* ==================== SITE SETTINGS ==================== */
+app.get("/api/settings", async (req, res) => {
+  let s = await db.findOne("settings", { _id: "site" });
+  if (!s) {
+    s = { _id: "site", siteName: "RishtaConnect", tagline: "Trusted Muslim Matrimony", primaryColor: "#0f766e" };
+    await db.insert("settings", s);
+  }
+  res.json(s);
+});
+app.put("/api/admin/settings", auth, adminOnly, async (req, res) => {
+  const existing = await db.findOne("settings", { _id: "site" });
+  if (existing) {
+    await db.update("settings", { _id: "site" }, { ...req.body, updatedAt: new Date() });
+  } else {
+    await db.insert("settings", { _id: "site", ...req.body });
+  }
+  res.json({ ok: true });
+});
+
+/* ==================== ADMIN ==================== */
+app.get("/api/admin/edits", auth, adminOnly, async (req, res) => {
+  const list = await db.find("pendingEdits", { status: "pending" });
+  res.json(list);
+});
+app.post("/api/admin/edits/:id/:action", auth, adminOnly, async (req, res) => {
+  const edit = await db.findOne("pendingEdits", { _id: req.params.id });
+  if (!edit) return res.status(404).json({ error: "Not found" });
+  if (req.params.action === "approve") {
+    const patch = {};
+    Object.entries(edit.changes).forEach(([k, v]) => { patch[k] = v.new; });
+    await db.update("users", { _id: edit.userId }, patch);
+    await db.update("pendingEdits", { _id: req.params.id }, { status: "approved" });
+  } else {
+    await db.update("pendingEdits", { _id: req.params.id }, { status: "rejected" });
+  }
+  res.json({ ok: true });
+});
+
+app.get("/api/admin/users", auth, adminOnly, async (req, res) => {
+  const list = await db.find("users", {});
+  res.json(list.map(sanitize));
+});
+app.get("/api/admin/reports", auth, adminOnly, async (req, res) => {
+  res.json(await db.find("reports", {}));
+});
+app.post("/api/admin/users/:id/ban", auth, adminOnly, async (req, res) => {
+  await db.update("users", { _id: req.params.id }, { banned: true });
+  res.json({ ok: true });
+});
+app.post("/api/admin/users/:id/unban", auth, adminOnly, async (req, res) => {
+  await db.update("users", { _id: req.params.id }, { banned: false });
+  res.json({ ok: true });
+});
+app.get("/api/admin/analytics", auth, adminOnly, async (req, res) => {
+  const users = await db.find("users", {});
+  const contacts = await db.find("contacts", {});
+  const blogs = await db.find("blogs", {});
+  res.json({
+    totalUsers: users.length,
+    free: users.filter(u => u.plan === "Free").length,
+    premium: users.filter(u => u.plan === "Premium").length,
+    vip: users.filter(u => u.plan === "VIP").length,
+    verified: users.filter(u => u.verifications?.cnic).length,
+    banned: users.filter(u => u.banned).length,
+    pendingEdits: (await db.find("pendingEdits", { status: "pending" })).length,
+    newContacts: contacts.filter(c => c.status === "new").length,
+    totalContacts: contacts.length,
+    totalBlogs: blogs.length
+  });
+});
+
+/* ==================== SOCKET.IO ==================== */
+io.use((socket, next) => {
+  const token = socket.handshake.auth?.token;
+  if (!token) return next();
+  try { socket.user = jwt.verify(token, JWT_SECRET); next(); }
+  catch (e) { next(); }
+});
+io.on("connection", (socket) => {
+  if (socket.user?.id) socket.join(socket.user.id);
+  socket.on("typing", ({ to }) => to && io.to(to).emit("typing", { from: socket.user?.id }));
+});
+
+/* ==================== HEALTH ==================== */
+app.get("/", (req, res) => res.json({
+  name: "RishtaConnect API",
+  status: "ok",
+  database: USE_MONGO ? (mongoReady ? "mongodb-atlas" : "mongodb-failed-using-json") : "json-file",
+  version: "2.0.0",
+  time: Date.now()
+}));
+
+/* ==================== START ==================== */
+(async () => {
+  await connectMongo();
+  server.listen(PORT, () => console.log(`✓ RishtaConnect API running on http://localhost:${PORT}`));
+})();
