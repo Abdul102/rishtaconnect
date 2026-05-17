@@ -308,11 +308,13 @@ function generateOTP() {
 }
 
 async function sendOTPEmail(to, code) {
-  // If SMTP credentials available, send via nodemailer.
+  // If SMTP credentials AND nodemailer available, send via email.
   // Otherwise log to console (visible in Railway logs).
-  if (process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS) {
+  let nodemailer;
+  try { nodemailer = require("nodemailer"); } catch(e) { /* nodemailer not installed */ }
+
+  if (nodemailer && process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS) {
     try {
-      const nodemailer = require("nodemailer");
       const transporter = nodemailer.createTransport({
         host: process.env.SMTP_HOST,
         port: Number(process.env.SMTP_PORT || 587),
