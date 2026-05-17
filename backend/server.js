@@ -616,8 +616,120 @@ app.get("/", (req, res) => res.json({
   time: Date.now()
 }));
 
+/* ==================== AUTO-SEED ==================== */
+// On first run (empty database) — automatically add demo data so admin can log in.
+async function autoSeedIfEmpty() {
+  try {
+    const users = await db.find("users", {});
+    if (users.length > 0) {
+      console.log(`ℹ  Database has ${users.length} users — skipping auto-seed`);
+      return;
+    }
+    console.log("ℹ  Database is empty — running auto-seed…");
+
+    const demoProfiles = [
+      { name: "Zeeshan Ahmed", email: "zeeshan@demo.com", phone: "+923001234567",
+        gender: "Male", age: 29, height: "5'10\"", maritalStatus: "Never Married",
+        city: "Lahore", country: "Pakistan", religion: "Islam", sect: "Sunni",
+        languages: ["Urdu","Punjabi","English"], qualification: "BBA", university: "LUMS",
+        profession: "Business", company: "Ahmed Honda Showroom",
+        income: "5 Lac+", jobType: "Self-Employed",
+        verifications: { phone: true, email: true, cnic: true, face: true, family: true, business: true },
+        plan: "Premium", trustScore: 92, timeline: "Within 1 year",
+        bio: "Business owner from Lahore." },
+      { name: "Areeba Fatima", email: "areeba@demo.com", phone: "+923012222222",
+        gender: "Female", age: 24, height: "5'4\"", maritalStatus: "Never Married",
+        city: "Islamabad", country: "Pakistan", religion: "Islam", sect: "Sunni",
+        languages: ["Urdu","English"], qualification: "BS Computer Science",
+        profession: "Teacher", company: "Roots International", income: "50k-1 Lac",
+        verifications: { phone: true, email: true, cnic: true, face: true, family: true, business: false },
+        plan: "Free", trustScore: 88, timeline: "Within 1 year",
+        bio: "Teacher and CS graduate." },
+      { name: "Hamza Khan", email: "hamza@demo.com", phone: "+971501234567",
+        gender: "Male", age: 31, height: "5'11\"", maritalStatus: "Never Married",
+        city: "Dubai", country: "UAE", overseas: true, religion: "Islam", sect: "Sunni",
+        languages: ["Urdu","English","Arabic"], qualification: "MS Software Engineering",
+        profession: "Software Engineer", company: "Emirates NBD", income: "10 Lac+",
+        verifications: { phone: true, email: true, cnic: true, face: true, family: true, business: false },
+        plan: "Premium", trustScore: 90, timeline: "Ready now" },
+      { name: "Mahnoor Tariq", email: "mahnoor@demo.com", phone: "+923213333333",
+        gender: "Female", age: 26, height: "5'5\"", maritalStatus: "Never Married",
+        city: "Karachi", country: "Pakistan", religion: "Islam", sect: "Sunni",
+        languages: ["Urdu","English"], qualification: "MBBS",
+        profession: "Doctor", company: "AKU Hospital", income: "1-3 Lac",
+        verifications: { phone: true, email: true, cnic: true, face: true, family: true, business: false },
+        plan: "VIP", trustScore: 94, timeline: "Within 1 year" },
+    ];
+
+    for (const p of demoProfiles) {
+      await db.insert("users", {
+        _id: uuid(), ...p, role: "user",
+        password: await bcrypt.hash("demo1234", 10),
+        photos: [], blurPhoto: p.gender === "Female",
+        createdAt: new Date(), lastActive: new Date()
+      });
+    }
+
+    // Admin user
+    await db.insert("users", {
+      _id: uuid(), name: "Admin", email: "admin@rishta.com",
+      password: await bcrypt.hash("admin1234", 10),
+      role: "admin", gender: "Male", verifications: {}, trustScore: 100, plan: "VIP",
+      createdAt: new Date(), lastActive: new Date()
+    });
+
+    // Sample blogs
+    const blogs = [
+      { title: "5 Tips for a Successful Rishta Search",
+        excerpt: "Patience, sincerity and family involvement.",
+        content: "Finding the right life partner is one of the most important decisions...",
+        coverImage: "🌙", author: "RishtaConnect Team", tags: ["Marriage","Tips"] },
+      { title: "How RishtaConnect Verifies Profiles",
+        excerpt: "Our 6-step verification process.",
+        content: "We take verification seriously. Every profile goes through up to 6 layers...",
+        coverImage: "✅", author: "Trust & Safety Team", tags: ["Verification","Safety"] },
+      { title: "Success Story: Ahmad & Fatima",
+        excerpt: "From first message to nikkah in 4 months.",
+        content: "Two families connected on RishtaConnect. Their story...",
+        coverImage: "💚", author: "Stories", tags: ["Success Story"] }
+    ];
+    for (const b of blogs) {
+      const slug = b.title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+      await db.insert("blogs", { _id: uuid(), ...b, slug, published: true, createdAt: new Date(), updatedAt: new Date() });
+    }
+
+    // Sample banners
+    const banners = [
+      { title: "Welcome to RishtaConnect", subtitle: "Pakistan's most trusted matrimonial platform", image: "🌙", bgColor: "#0f766e", order: 1, active: true },
+      { title: "Eid Special — 50% off Premium", subtitle: "Upgrade and unlock unlimited matches", image: "🎁", bgColor: "#c8a25b", order: 2, active: true },
+      { title: "Now in 6 Countries", subtitle: "PK • UAE • KSA • UK • USA • Canada", image: "🌍", bgColor: "#134e4a", order: 3, active: true }
+    ];
+    for (const b of banners) {
+      await db.insert("banners", { _id: uuid(), ...b, link: "#", createdAt: new Date() });
+    }
+
+    // Default settings
+    await db.insert("settings", {
+      _id: "site", siteName: "RishtaConnect",
+      tagline: "Trusted Muslim Matrimony • AI-Powered • Family Friendly",
+      primaryColor: "#0f766e", contactEmail: "info@rishtaconnect.com",
+      contactPhone: "+92-300-1234567", whatsapp: "+92-300-1234567",
+      address: "Lahore, Pakistan",
+      maintenanceMode: false, signupEnabled: true,
+      updatedAt: new Date()
+    });
+
+    console.log("✓ Auto-seeded:", demoProfiles.length + 1, "users,", blogs.length, "blogs,", banners.length, "banners");
+    console.log("  Admin → admin@rishta.com / admin1234");
+    console.log("  User  → zeeshan@demo.com / demo1234");
+  } catch (e) {
+    console.error("✗ Auto-seed failed:", e.message);
+  }
+}
+
 /* ==================== START ==================== */
 (async () => {
   await connectMongo();
+  await autoSeedIfEmpty();
   server.listen(PORT, () => console.log(`✓ RishtaConnect API running on http://localhost:${PORT}`));
 })();
