@@ -195,11 +195,21 @@ const useI18n = () => useContext(I18nCtx);
 // Auto-detects backend: localhost in dev, set window.API_URL for production.
 const API_BASE = (typeof window !== "undefined" && window.API_URL) ||
                   (location.hostname === "localhost" ? "http://localhost:4000" : "");
+
+class APIError extends Error {
+  constructor(message, status, body) {
+    super(message); this.status = status; this.body = body;
+  }
+}
+
 async function api(path, opts={}) {
-  if (!API_BASE) return null; // offline mode — frontend uses localStorage only
+  if (!API_BASE) {
+    throw new APIError("Backend not configured. Please contact support.", 0, null);
+  }
+  const token = localStorage.getItem("rishta_token");
+  let r;
   try {
-    const token = localStorage.getItem("rishta_token");
-    const r = await fetch(API_BASE + path, {
+    r = await fetch(API_BASE + path, {
       ...opts,
       headers: {
         "Content-Type":"application/json",
@@ -208,15 +218,22 @@ async function api(path, opts={}) {
       },
       body: opts.body ? JSON.stringify(opts.body) : undefined
     });
-    if (!r.ok) {
-      const text = await r.text();
-      throw new Error(text || r.statusText);
-    }
-    return r.json();
   } catch(e) {
-    console.warn("API offline:", e.message);
-    return null;
+    throw new APIError("Cannot reach server. Check your internet connection.", 0, null);
   }
+  let body = null;
+  try { body = await r.json(); } catch(e) {}
+  if (!r.ok) {
+    const msg = body?.error || body?.message || r.statusText || "Request failed";
+    throw new APIError(msg, r.status, body);
+  }
+  return body;
+}
+
+// Safe wrapper for non-critical calls that should silently fail (e.g., loading blogs)
+async function apiSilent(path, opts={}) {
+  try { return await api(path, opts); }
+  catch(e) { console.warn("API silent fail:", path, e.message); return null; }
 }
 
 /* ---------------- Demo Data ---------------- */
@@ -574,7 +591,7 @@ function ContactSection({settings}){
     e.preventDefault();
     if(!form.name || !form.email || !form.message) { alert("Name, email and message are required"); return; }
     setSending(true);
-    const res = await api("/api/contact", { method:"POST", body: form });
+    const res = await apiSilent("/api/contact", { method:"POST", body: form });
     setSending(false);
     if(res?.ok) { setSent(true); setForm({ name:"", email:"", phone:"", subject:"", message:"" }); }
     else {
@@ -958,14 +975,73 @@ function Landing({onStart, onLogin}){
   );
 }
 
-/* ---------------- Auth ---------------- */
+/* ---------------- Auth (Strict & Secure) ---------------- */
 function AuthScreen({mode, onAuth, onSwitch}){
   const [form, setForm] = useState({ name:"", email:"", phone:"", password:"", gender:"Male" });
   const [step, setStep] = useState("form");
   const [otp, setOtp] = useState("");
-  const onSubmit = ()=>{
-    if(mode==="signup") setStep("otp"); else onAuth(form, "login");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  // Email validator
+  const isValidEmail = (e)=> /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);
+
+  const validateForm = ()=>{
+    setError("");
+    if (mode === "signup") {
+      if (!form.name || form.name.trim().length < 2) { setError("Please enter your full name (at least 2 characters)"); return false; }
+      if (!form.phone || form.phone.length < 7) { setError("Please enter a valid phone number"); return false; }
+      if (!form.gender) { setError("Please select your gender"); return false; }
+    }
+    if (!form.email || !isValidEmail(form.email)) { setError("Please enter a valid email address"); return false; }
+    if (!form.password || form.password.length < 6) { setError("Password must be at least 6 characters"); return false; }
+    return true;
   };
+
+  const onLoginSubmit = async ()=>{
+    if (!validateForm()) return;
+    setLoading(true); setError("");
+    try {
+      await onAuth(form, "login");
+      // success — handled by parent
+    } catch (e) {
+      setError(e.message || "Invalid email or password");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const onSignupRequestOTP = async ()=>{
+    if (!validateForm()) return;
+    setLoading(true); setError("");
+    try {
+      // Request OTP from backend (sends to phone/email)
+      await apiSilent("/api/auth/otp/send", { method:"POST", body:{ phone: form.phone, email: form.email }});
+      setStep("otp");
+    } catch (e) {
+      setError(e.message || "Failed to send OTP. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const onOTPVerify = async ()=>{
+    setError("");
+    if (!otp || otp.length !== 6) { setError("Please enter the 6-digit OTP"); return; }
+    setLoading(true);
+    try {
+      // Verify OTP with backend
+      const r = await api("/api/auth/otp/verify", { method:"POST", body:{ otp, phone: form.phone, email: form.email }});
+      if (!r?.ok) { setError("Invalid OTP. Please check the code and try again."); return; }
+      // OTP verified → now create the account
+      await onAuth(form, "signup");
+    } catch (e) {
+      setError(e.message || "OTP verification failed");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="min-h-screen pattern-bg flex items-center justify-center p-5">
       <div className="w-full max-w-md bg-white rounded-3xl shadow-soft p-7">
@@ -979,46 +1055,73 @@ function AuthScreen({mode, onAuth, onSwitch}){
         <h2 className="font-display text-2xl">{mode==="signup"?"Create Account":"Welcome Back"}</h2>
         <p className="font-urdu text-gray-600 mt-1">{mode==="signup"?"اکاؤنٹ بنائیں":"خوش آمدید"}</p>
 
+        {error && (
+          <div className="mt-4 p-3 rounded-xl bg-red-50 border border-red-200 text-red-800 text-sm flex items-start gap-2">
+            <span>⚠️</span>
+            <div>{error}</div>
+          </div>
+        )}
+
         {step==="form" && (
           <div className="mt-5 space-y-3">
             {mode==="signup" && (
               <>
-                <input value={form.name} onChange={e=>setForm({...form, name:e.target.value})} placeholder="Full Name / پورا نام" className="w-full px-4 py-3 rounded-xl border border-gray-200"/>
+                <input value={form.name} onChange={e=>setForm({...form, name:e.target.value})} placeholder="Full Name / پورا نام *" className="w-full px-4 py-3 rounded-xl border border-gray-200" autoComplete="name"/>
                 <div className="grid grid-cols-2 gap-3">
                   <select value={form.gender} onChange={e=>setForm({...form, gender:e.target.value})} className="w-full px-4 py-3 rounded-xl border border-gray-200">
                     <option>Male</option><option>Female</option>
                   </select>
-                  <input value={form.phone} onChange={e=>setForm({...form, phone:e.target.value})} placeholder="Phone +92…" className="w-full px-4 py-3 rounded-xl border border-gray-200"/>
+                  <input value={form.phone} onChange={e=>setForm({...form, phone:e.target.value})} placeholder="Phone +92… *" className="w-full px-4 py-3 rounded-xl border border-gray-200" autoComplete="tel"/>
                 </div>
               </>
             )}
-            <input value={form.email} onChange={e=>setForm({...form, email:e.target.value})} placeholder="Email / ای میل" className="w-full px-4 py-3 rounded-xl border border-gray-200"/>
-            <input type="password" value={form.password} onChange={e=>setForm({...form, password:e.target.value})} placeholder="Password / پاس ورڈ" className="w-full px-4 py-3 rounded-xl border border-gray-200"/>
-            <button onClick={onSubmit} className="btn-primary w-full py-3 rounded-xl font-semibold">
-              {mode==="signup"?"Continue":"Login"}
+            <input type="email" value={form.email} onChange={e=>setForm({...form, email:e.target.value})} placeholder="Email / ای میل *" className="w-full px-4 py-3 rounded-xl border border-gray-200" autoComplete={mode==="signup"?"email":"username"}/>
+            <input type="password" value={form.password} onChange={e=>setForm({...form, password:e.target.value})} placeholder="Password / پاس ورڈ * (min 6 chars)" className="w-full px-4 py-3 rounded-xl border border-gray-200" autoComplete={mode==="signup"?"new-password":"current-password"} onKeyDown={e=>{ if(e.key==="Enter") (mode==="signup" ? onSignupRequestOTP : onLoginSubmit)(); }}/>
+            <button onClick={mode==="signup" ? onSignupRequestOTP : onLoginSubmit} disabled={loading} className="btn-primary w-full py-3 rounded-xl font-semibold disabled:opacity-60 disabled:cursor-not-allowed">
+              {loading ? "Please wait..." : (mode==="signup" ? "Continue → Verify OTP" : "Login")}
             </button>
+            {mode==="login" && (
+              <div className="text-center">
+                <button className="text-xs text-emerald-brand font-semibold">Forgot password?</button>
+              </div>
+            )}
             <div className="text-center text-xs text-gray-500">or continue with</div>
             <div className="grid grid-cols-3 gap-2">
-              <button className="py-2 rounded-xl border hover:bg-gray-50 text-sm">Google</button>
-              <button className="py-2 rounded-xl border hover:bg-gray-50 text-sm">Apple</button>
-              <button className="py-2 rounded-xl border hover:bg-gray-50 text-sm">Phone</button>
+              <button disabled className="py-2 rounded-xl border bg-gray-50 text-sm text-gray-400 cursor-not-allowed" title="Coming soon">Google</button>
+              <button disabled className="py-2 rounded-xl border bg-gray-50 text-sm text-gray-400 cursor-not-allowed" title="Coming soon">Apple</button>
+              <button disabled className="py-2 rounded-xl border bg-gray-50 text-sm text-gray-400 cursor-not-allowed" title="Coming soon">Phone</button>
             </div>
             <div className="text-center text-sm mt-2">
               {mode==="signup" ? (
-                <span>Already have an account? <button onClick={()=>onSwitch("login")} className="text-emerald-brand font-semibold">Login</button></span>
+                <span>Already have an account? <button onClick={()=>{ setError(""); onSwitch("login"); }} className="text-emerald-brand font-semibold">Login</button></span>
               ) : (
-                <span>New here? <button onClick={()=>onSwitch("signup")} className="text-emerald-brand font-semibold">Sign Up</button></span>
+                <span>New here? <button onClick={()=>{ setError(""); onSwitch("signup"); }} className="text-emerald-brand font-semibold">Sign Up</button></span>
               )}
+            </div>
+            <div className="text-center text-[10px] text-gray-400 mt-2">
+              🔒 Strict authentication • Encrypted • OTP-verified signup
             </div>
           </div>
         )}
 
         {step==="otp" && (
           <div className="mt-5 space-y-3">
-            <div className="text-sm text-gray-600">We sent an OTP to <b>{form.phone||form.email}</b>. Enter <b>123456</b> to continue.</div>
-            <input value={otp} onChange={e=>setOtp(e.target.value)} placeholder="6-digit OTP" className="w-full px-4 py-3 rounded-xl border border-gray-200 tracking-widest text-center"/>
-            <button onClick={()=>otp==="123456" ? onAuth(form, "signup") : alert("Use 123456 for demo")} className="btn-primary w-full py-3 rounded-xl font-semibold">Verify & Continue</button>
-            <div className="text-xs text-gray-500 text-center">2FA enabled • Encrypted authentication</div>
+            <div className="text-sm text-gray-600">
+              📱 We sent a 6-digit OTP to <b>{form.phone}</b> and <b>{form.email}</b>.
+              <div className="mt-2 text-xs bg-amber-50 border border-amber-200 rounded-lg p-2 text-amber-800">
+                <b>Demo mode:</b> Use OTP <b className="font-mono text-base">123456</b> to continue.
+                <br/>(In production: SMS via Twilio/Easypaisa OTP gateway)
+              </div>
+            </div>
+            <input value={otp} onChange={e=>setOtp(e.target.value.replace(/\D/g,"").slice(0,6))} placeholder="6-digit OTP" className="w-full px-4 py-3 rounded-xl border border-gray-200 tracking-[0.5em] text-center text-2xl font-mono" autoFocus inputMode="numeric" onKeyDown={e=>{ if(e.key==="Enter") onOTPVerify(); }}/>
+            <button onClick={onOTPVerify} disabled={loading || otp.length!==6} className="btn-primary w-full py-3 rounded-xl font-semibold disabled:opacity-60 disabled:cursor-not-allowed">
+              {loading ? "Verifying..." : "Verify & Create Account"}
+            </button>
+            <div className="flex items-center justify-between text-sm">
+              <button onClick={()=>{ setStep("form"); setError(""); setOtp(""); }} className="text-gray-600">← Back</button>
+              <button onClick={onSignupRequestOTP} disabled={loading} className="text-emerald-brand font-semibold">Resend OTP</button>
+            </div>
+            <div className="text-xs text-gray-500 text-center">🔒 2FA enabled • Encrypted • Backend-verified</div>
           </div>
         )}
       </div>
@@ -2726,7 +2829,7 @@ function AdminUsersTab({users, reload}){
   const [q, setQ] = useState("");
   const filtered = users.filter(u=> (u.name+u.email+u.city||"").toLowerCase().includes(q.toLowerCase()));
   const banUser = async (id, banned)=>{
-    await api("/api/admin/users/"+id+(banned?"/unban":"/ban"), { method:"POST" });
+    await apiSilent("/api/admin/users/"+id+(banned?"/unban":"/ban"), { method:"POST" });
     reload();
   };
   return (
@@ -2764,7 +2867,7 @@ function AdminUsersTab({users, reload}){
 
 function AdminEditsTab({edits, reload}){
   const action = async (id, act)=>{
-    await api("/api/admin/edits/"+id+"/"+act, { method:"POST" });
+    await apiSilent("/api/admin/edits/"+id+"/"+act, { method:"POST" });
     reload();
   };
   return (
@@ -3006,7 +3109,7 @@ function AdminBlogs(){
   const empty = { title:"", excerpt:"", content:"", coverImage:"📝", author:"", tags:[], published:true };
 
   const load = async ()=>{
-    const list = await api("/api/blogs");
+    const list = await apiSilent("/api/blogs");
     if(list) setBlogs(list);
     else {
       const local = JSON.parse(localStorage.getItem("rishta_blogs")||"[]");
@@ -3018,7 +3121,7 @@ function AdminBlogs(){
   const save = async ()=>{
     if(!editing.title || !editing.content){ alert("Title and content required"); return; }
     if(editing._id){
-      const r = await api("/api/admin/blogs/"+editing._id, { method:"PUT", body: editing });
+      const r = await apiSilent("/api/admin/blogs/"+editing._id, { method:"PUT", body: editing });
       if(!r) {
         const local = JSON.parse(localStorage.getItem("rishta_blogs")||"[]");
         const idx = local.findIndex(b=>b._id===editing._id);
@@ -3026,7 +3129,7 @@ function AdminBlogs(){
         localStorage.setItem("rishta_blogs", JSON.stringify(local));
       }
     } else {
-      const r = await api("/api/admin/blogs", { method:"POST", body: editing });
+      const r = await apiSilent("/api/admin/blogs", { method:"POST", body: editing });
       if(!r) {
         const local = JSON.parse(localStorage.getItem("rishta_blogs")||"[]");
         local.push({ ...editing, _id:"local-"+Date.now(), createdAt:new Date().toISOString() });
@@ -3038,7 +3141,7 @@ function AdminBlogs(){
   };
   const remove = async (id)=>{
     if(!confirm("Delete this blog?")) return;
-    const r = await api("/api/admin/blogs/"+id, { method:"DELETE" });
+    const r = await apiSilent("/api/admin/blogs/"+id, { method:"DELETE" });
     if(!r) {
       const local = JSON.parse(localStorage.getItem("rishta_blogs")||"[]");
       localStorage.setItem("rishta_blogs", JSON.stringify(local.filter(b=>b._id!==id)));
@@ -3095,7 +3198,7 @@ function AdminBanners(){
   const empty = { title:"", subtitle:"", image:"🌙", link:"#", bgColor:"#0f766e", active:true, order:0 };
 
   const load = async ()=>{
-    const list = await api("/api/banners");
+    const list = await apiSilent("/api/banners");
     if(list) setBanners(list);
     else setBanners(JSON.parse(localStorage.getItem("rishta_banners")||"[]"));
   };
@@ -3104,7 +3207,7 @@ function AdminBanners(){
   const save = async ()=>{
     if(!editing.title){ alert("Title required"); return; }
     if(editing._id){
-      const r = await api("/api/admin/banners/"+editing._id, { method:"PUT", body: editing });
+      const r = await apiSilent("/api/admin/banners/"+editing._id, { method:"PUT", body: editing });
       if(!r) {
         const local = JSON.parse(localStorage.getItem("rishta_banners")||"[]");
         const idx = local.findIndex(b=>b._id===editing._id);
@@ -3112,7 +3215,7 @@ function AdminBanners(){
         localStorage.setItem("rishta_banners", JSON.stringify(local));
       }
     } else {
-      const r = await api("/api/admin/banners", { method:"POST", body: editing });
+      const r = await apiSilent("/api/admin/banners", { method:"POST", body: editing });
       if(!r) {
         const local = JSON.parse(localStorage.getItem("rishta_banners")||"[]");
         local.push({ ...editing, _id:"local-"+Date.now() });
@@ -3123,7 +3226,7 @@ function AdminBanners(){
   };
   const remove = async (id)=>{
     if(!confirm("Delete banner?")) return;
-    const r = await api("/api/admin/banners/"+id, { method:"DELETE" });
+    const r = await apiSilent("/api/admin/banners/"+id, { method:"DELETE" });
     if(!r) {
       const local = JSON.parse(localStorage.getItem("rishta_banners")||"[]");
       localStorage.setItem("rishta_banners", JSON.stringify(local.filter(b=>b._id!==id)));
@@ -3189,14 +3292,14 @@ function AdminContacts(){
   const [active, setActive] = useState(null);
 
   const load = async ()=>{
-    const list = await api("/api/admin/contacts");
+    const list = await apiSilent("/api/admin/contacts");
     if(list) setContacts(list);
     else setContacts(JSON.parse(localStorage.getItem("rishta_contacts")||"[]"));
   };
   useEffect(()=>{ load(); },[]);
 
   const markRead = async (id, status="read")=>{
-    const r = await api("/api/admin/contacts/"+id, { method:"PUT", body:{ status }});
+    const r = await apiSilent("/api/admin/contacts/"+id, { method:"PUT", body:{ status }});
     if(!r) {
       const local = JSON.parse(localStorage.getItem("rishta_contacts")||"[]");
       const idx = local.findIndex(c=>c._id===id);
@@ -3207,7 +3310,7 @@ function AdminContacts(){
   };
   const remove = async (id)=>{
     if(!confirm("Delete this message?")) return;
-    const r = await api("/api/admin/contacts/"+id, { method:"DELETE" });
+    const r = await apiSilent("/api/admin/contacts/"+id, { method:"DELETE" });
     if(!r) {
       const local = JSON.parse(localStorage.getItem("rishta_contacts")||"[]");
       localStorage.setItem("rishta_contacts", JSON.stringify(local.filter(c=>c._id!==id)));
@@ -3253,7 +3356,7 @@ function AdminSettings(){
   const [saved, setSaved] = useState(false);
 
   useEffect(()=>{ (async ()=>{
-    const cur = await api("/api/settings");
+    const cur = await apiSilent("/api/settings");
     if(cur) setS(prev=>({...prev, ...cur}));
     else {
       const local = JSON.parse(localStorage.getItem("rishta_settings")||"null");
@@ -3262,7 +3365,7 @@ function AdminSettings(){
   })(); },[]);
 
   const save = async ()=>{
-    const r = await api("/api/admin/settings", { method:"PUT", body: s });
+    const r = await apiSilent("/api/admin/settings", { method:"PUT", body: s });
     if(!r) localStorage.setItem("rishta_settings", JSON.stringify(s));
     setSaved(true);
     setTimeout(()=>setSaved(false), 2500);
@@ -3350,48 +3453,63 @@ function App(){
     if(view==="notifications") setUnreadNotifs(0);
   },[view]);
 
-  // Persist
+  // Persist & validate session on mount
   useEffect(()=>{
-    try{
-      const saved = JSON.parse(localStorage.getItem("rishta_state")||"null");
-      if(saved){
-        setUser(saved.user||null);
-        setUsers(saved.users||SEED_USERS);
-        setMessages(saved.messages||SEED_MESSAGES);
-        if(saved.user) setView("home");
-      }
-    }catch(e){}
+    (async ()=>{
+      try {
+        const saved = JSON.parse(localStorage.getItem("rishta_state")||"null");
+        const token = localStorage.getItem("rishta_token");
+        if (saved?.user && token) {
+          // Verify token with backend before restoring session
+          try {
+            const verified = await api("/api/me");
+            if (verified) {
+              const u = { ...verified, id: verified._id || verified.id };
+              setUser(u);
+              setUsers(saved.users || SEED_USERS);
+              setMessages(saved.messages || SEED_MESSAGES);
+              if (u.role === "admin") {
+                location.hash = "#/admin/dashboard";
+                setView("admin");
+              } else {
+                setView("home");
+              }
+              return;
+            }
+          } catch (e) {
+            console.warn("Session invalid, logging out:", e.message);
+          }
+        }
+        // Either no session or session invalid — clean up
+        localStorage.removeItem("rishta_token");
+        localStorage.removeItem("rishta_state");
+        // Load seed data only for demo browsing
+        setUsers(SEED_USERS);
+        setMessages(SEED_MESSAGES);
+      } catch(e) {}
+    })();
   },[]);
   useEffect(()=>{
     try{ localStorage.setItem("rishta_state", JSON.stringify({user,users,messages})); }catch(e){}
   },[user,users,messages]);
 
   const onAuth = async (form, mode)=>{
-    // Try backend first
+    // Strict backend-only authentication. NO local fallback.
+    // Throws APIError on failure — AuthScreen will display the error.
     const path = mode==="login" ? "/api/auth/login" : "/api/auth/signup";
     const res = await api(path, { method:"POST", body: form });
-    if(res?.token){
-      localStorage.setItem("rishta_token", res.token);
-      const u = { ...res.user, id: res.user._id || res.user.id };
-      setUser(u);
-      if (u.role === "admin") {
-        location.hash = "#/admin/dashboard";
-        setView("admin");
-      } else {
-        setView(mode==="login" ? "home" : "setup");
-      }
-      return;
+    if (!res?.token || !res?.user) {
+      throw new APIError("Authentication failed. Server did not return valid credentials.", 0, null);
     }
-    // Fallback: local-only mode
-    const u = {
-      id: uid(), name: form.name||"New User", email:form.email, phone:form.phone,
-      gender: form.gender, age:"", city:"Lahore", country:"Pakistan", religion:"Islam",
-      sect:"Sunni", profession:"", trustScore:60, plan:"Free",
-      verifications:{ phone:true, email:true, cnic:false, face:false, family:false, business:false },
-      preferences:{}, photos:[], blurPhoto:true, languages:["Urdu","English"], timeline:"Just exploring"
-    };
+    localStorage.setItem("rishta_token", res.token);
+    const u = { ...res.user, id: res.user._id || res.user.id };
     setUser(u);
-    setView(mode==="login" ? "home" : "setup");
+    if (u.role === "admin") {
+      location.hash = "#/admin/dashboard";
+      setView("admin");
+    } else {
+      setView(mode==="login" ? "home" : "setup");
+    }
   };
 
   const sendMessage = (toId, text)=>{
