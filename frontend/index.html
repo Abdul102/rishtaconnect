@@ -192,9 +192,14 @@ const I18nCtx = createContext({ lang: "en", t:(k)=>k, setLang:()=>{} });
 const useI18n = () => useContext(I18nCtx);
 
 /* ---------------- API Client ---------------- */
-// Auto-detects backend: localhost in dev, set window.API_URL for production.
+// Backend URL configuration:
+//   1. window.API_URL from config.js (custom override)
+//   2. localhost for dev
+//   3. Production Railway backend (hardcoded default)
 const API_BASE = (typeof window !== "undefined" && window.API_URL) ||
-                  (location.hostname === "localhost" ? "http://localhost:4000" : "");
+                  (location.hostname === "localhost"
+                    ? "http://localhost:4000"
+                    : "https://rishtaconnect-production.up.railway.app");
 
 class APIError extends Error {
   constructor(message, status, body) {
