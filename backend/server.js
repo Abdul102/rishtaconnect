@@ -298,8 +298,87 @@ app.post("/api/auth/login", async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-app.post("/api/auth/otp/send", (req, res) => res.json({ ok: true, demoOtp: "123456" }));
-app.post("/api/auth/otp/verify", (req, res) => res.json({ ok: req.body.otp === "123456" }));
+/* ---------------- REAL OTP SYSTEM ---------------- */
+// In-memory store (resets on server restart, fine for free tier).
+// Production: move to Redis or MongoDB collection with TTL index.
+const otpStore = new Map(); // key: email/phone, value: { code, expires }
+
+function generateOTP() {
+  return String(Math.floor(100000 + Math.random() * 900000));
+}
+
+async function sendOTPEmail(to, code) {
+  // If SMTP credentials available, send via nodemailer.
+  // Otherwise log to console (visible in Railway logs).
+  if (process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS) {
+    try {
+      const nodemailer = require("nodemailer");
+      const transporter = nodemailer.createTransport({
+        host: process.env.SMTP_HOST,
+        port: Number(process.env.SMTP_PORT || 587),
+        secure: process.env.SMTP_SECURE === "true",
+        auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS }
+      });
+      await transporter.sendMail({
+        from: `"RishtaConnect" <${process.env.SMTP_USER}>`,
+        to,
+        subject: "Your RishtaConnect Verification Code",
+        text: `Your OTP is: ${code}\n\nIt expires in 10 minutes. Do not share this code with anyone.`,
+        html: `<div style="font-family:Inter,sans-serif;padding:20px;max-width:480px;margin:auto;background:#f0fdf4;border-radius:16px;border:1px solid #86efac">
+                 <h2 style="color:#0f766e">RishtaConnect Verification</h2>
+                 <p>Use this OTP to verify your account:</p>
+                 <div style="font-size:32px;letter-spacing:8px;font-weight:700;text-align:center;background:white;padding:16px;border-radius:8px;color:#0f766e;margin:16px 0">${code}</div>
+                 <p style="color:#666;font-size:13px">Expires in 10 minutes. Do not share with anyone.</p>
+               </div>`
+      });
+      return { sent: true, channel: "email" };
+    } catch (e) {
+      console.error("SMTP send failed:", e.message);
+      return { sent: false, channel: "email", error: e.message };
+    }
+  } else {
+    console.log(`📧 [OTP for ${to}] → ${code}  (configure SMTP_* env vars to send real emails)`);
+    return { sent: false, channel: "console" };
+  }
+}
+
+app.post("/api/auth/otp/send", async (req, res) => {
+  const { email, phone } = req.body;
+  const key = (email || phone || "").toLowerCase().trim();
+  if (!key) return res.status(400).json({ error: "Email or phone required" });
+  const code = generateOTP();
+  const expires = Date.now() + 10 * 60 * 1000; // 10 minutes
+  otpStore.set(key, { code, expires, attempts: 0 });
+  const result = await sendOTPEmail(email || key, code);
+  // In production NEVER return the code. Only for first launch — return when SMTP not configured.
+  const response = { ok: true, channel: result.channel };
+  if (process.env.NODE_ENV !== "production" && !result.sent) {
+    response.debug = "OTP logged to server console. Configure SMTP_* env vars for email delivery.";
+    response.devOtp = code; // ONLY when SMTP not configured (for testing)
+  }
+  res.json(response);
+});
+
+app.post("/api/auth/otp/verify", (req, res) => {
+  const { email, phone, otp } = req.body;
+  const key = (email || phone || "").toLowerCase().trim();
+  const entry = otpStore.get(key);
+  if (!entry) return res.json({ ok: false, error: "No OTP requested for this account" });
+  if (Date.now() > entry.expires) {
+    otpStore.delete(key);
+    return res.json({ ok: false, error: "OTP expired. Request a new one." });
+  }
+  entry.attempts = (entry.attempts || 0) + 1;
+  if (entry.attempts > 5) {
+    otpStore.delete(key);
+    return res.json({ ok: false, error: "Too many failed attempts. Request a new OTP." });
+  }
+  if (entry.code !== String(otp).trim()) {
+    return res.json({ ok: false, error: "Incorrect OTP. " + (5 - entry.attempts) + " attempts left." });
+  }
+  otpStore.delete(key);
+  res.json({ ok: true });
+});
 
 /* ==================== PROFILE ==================== */
 app.get("/api/me", auth, async (req, res) => {
@@ -575,6 +654,60 @@ app.post("/api/admin/users/:id/ban", auth, adminOnly, async (req, res) => {
 });
 app.post("/api/admin/users/:id/unban", auth, adminOnly, async (req, res) => {
   await db.update("users", { _id: req.params.id }, { banned: false });
+  res.json({ ok: true });
+});
+
+// Deactivate / Activate (different from ban — user just paused)
+app.post("/api/admin/users/:id/deactivate", auth, adminOnly, async (req, res) => {
+  await db.update("users", { _id: req.params.id }, { active: false });
+  res.json({ ok: true });
+});
+app.post("/api/admin/users/:id/activate", auth, adminOnly, async (req, res) => {
+  await db.update("users", { _id: req.params.id }, { active: true });
+  res.json({ ok: true });
+});
+
+// Reset user password (admin-initiated)
+app.post("/api/admin/users/:id/reset-password", auth, adminOnly, async (req, res) => {
+  const { newPassword } = req.body;
+  if (!newPassword || newPassword.length < 6) return res.status(400).json({ error: "Password must be at least 6 characters" });
+  const hash = await bcrypt.hash(newPassword, 10);
+  await db.update("users", { _id: req.params.id }, { password: hash });
+  await db.insert("activityLogs", { _id: uuid(), userId: req.params.id, type: "admin_password_reset", time: new Date(), by: req.user.id });
+  res.json({ ok: true, message: "Password reset successfully" });
+});
+
+// Send admin message to a user (goes into their chat with system / admin)
+app.post("/api/admin/users/:id/message", auth, adminOnly, async (req, res) => {
+  const { text } = req.body;
+  if (!text) return res.status(400).json({ error: "Message required" });
+  const adminId = req.user.id;
+  const key = [adminId, req.params.id].sort().join("-");
+  const msg = { _id: uuid(), from: adminId, to: req.params.id, text: "[Admin] " + text, time: new Date() };
+  await db.addMessage(key, msg);
+  io.to(req.params.id).emit("message", msg);
+  await db.insert("activityLogs", { _id: uuid(), userId: req.params.id, type: "admin_message", time: new Date(), by: adminId, message: text });
+  res.json({ ok: true });
+});
+
+// Get single user full detail (for admin)
+app.get("/api/admin/users/:id", auth, adminOnly, async (req, res) => {
+  const user = await db.findOne("users", { _id: req.params.id });
+  if (!user) return res.status(404).json({ error: "User not found" });
+  res.json(sanitize(user));
+});
+
+// Update any user field (admin override)
+app.put("/api/admin/users/:id", auth, adminOnly, async (req, res) => {
+  const allowed = { ...req.body };
+  delete allowed._id; delete allowed.id; delete allowed.role; delete allowed.password;
+  await db.update("users", { _id: req.params.id }, allowed);
+  res.json({ ok: true });
+});
+
+// Delete user (hard delete - admin only)
+app.delete("/api/admin/users/:id", auth, adminOnly, async (req, res) => {
+  await db.remove("users", { _id: req.params.id });
   res.json({ ok: true });
 });
 app.get("/api/admin/analytics", auth, adminOnly, async (req, res) => {
