@@ -258,9 +258,9 @@ On startup, if `users` collection is empty:
 | Meetings with auto links | ✅ Done | `Meetings` |
 | Admin separate layout | ✅ Done | `AdminLayout`, `AdminContent` |
 | Admin blog/banner/contact/settings CMS | ✅ Done | `AdminBlogs`, `AdminBanners`, `AdminContacts`, `AdminSettings` |
-| Admin actions (ban, deactivate, password reset, message) | ⚠️ Backend done, frontend pending | `AdminUsersTab` needs enhancement |
-| `/admin/login` dedicated route | ⚠️ Pending | Add to `App` routing |
-| Logout confirmation dialog | ⚠️ Pending | Add to `App.onLogout` |
+| Admin actions (ban, deactivate, password reset, message, edit, delete) | ✅ Done | `AdminUsersTab`, `AdminMessageModal`, `AdminPasswordModal`, `AdminEditUserModal` |
+| `/admin/login` dedicated route | ✅ Done | `AdminLoginScreen` — accessible at `#/admin/login` |
+| Logout confirmation dialog | ✅ Done | `App.requestLogout`, `confirmLogout`, modal at bottom of App |
 | Notification + Message badges + sound | ✅ Done | `TopBar`, `BottomNav`, `playChime` |
 | Persistent saved filter views | ✅ Done | `SearchView` |
 | Auto-seed empty DB | ✅ Done | `server.js` `autoSeedIfEmpty()` |
@@ -301,11 +301,9 @@ On startup, if `users` collection is empty:
 
 ## 🔮 Known Pending Items
 
-1. **`/admin/login` separate route** — Currently admin logs in via main login then redirects. User wants dedicated `/#/admin/login` page with different UI.
-2. **Logout confirmation modal** — Currently logs out instantly. Need confirm dialog.
-3. **AdminUsersTab actions** — Backend endpoints exist (deactivate, reset-password, admin message) but frontend table only has Ban/Unban. Need action menu.
-4. **Real-time chat from profile detail** — Profile detail has "Message" button that opens chat; works but needs the chat to actually open a conversation thread with that specific user (currently switches to chat view but conversation may not auto-select).
-5. **Email SMTP configuration** — Backend supports it but user needs to add SMTP_HOST/USER/PASS env vars to Railway. Without it, OTPs are logged to console only.
+1. **Real-time chat from profile detail** — Profile detail "Message" button switches to chat view but doesn't auto-select that user's thread. Improvement: pass selected user ID to ChatView.
+2. **Email SMTP configuration** — Backend code supports it but user needs to add SMTP_HOST/USER/PASS env vars to Railway. Without it, OTPs are logged to Railway console.
+3. **Profile photo display in admin** — Admin user list shows name/email but not photos. Could enhance with avatar column.
 
 ---
 
