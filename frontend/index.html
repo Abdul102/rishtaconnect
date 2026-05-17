@@ -241,8 +241,10 @@ async function apiSilent(path, opts={}) {
   catch(e) { console.warn("API silent fail:", path, e.message); return null; }
 }
 
-/* ---------------- Demo Data ---------------- */
-const SEED_USERS = [
+/* ---------------- Empty Seed (real data from backend) ---------------- */
+// SEED_USERS only used as fallback if backend is unreachable.
+// In production, all user data comes from /api/users → MongoDB Atlas.
+const _LEGACY_DEMO_USERS = [
   {
     id: "u1", role:"male", name:"Zeeshan Ahmed", nameUr:"ذیشان احمد",
     age:29, gender:"Male", height:"5'10\"", maritalStatus:"Never Married",
@@ -378,13 +380,12 @@ const SEED_USERS = [
   }
 ];
 
-const SEED_MESSAGES = {
-  "u1-u2": [
-    { from:"u1", text:"Assalamu Alaikum, hope you and your family are well.", time:"10:24 AM" },
-    { from:"u2", text:"Walaikum Assalam, alhamdulillah. JazakAllah for your interest.", time:"10:30 AM" },
-    { from:"u1", text:"Would your family be open to a formal meeting in sha Allah?", time:"10:32 AM" }
-  ]
-};
+// No seed messages — each user starts with empty chat. Conversations grow organically.
+const SEED_MESSAGES = {};
+
+// In production, all users come from MongoDB via /api/users.
+// Legacy demo array is referenced but ignored in production flow.
+const SEED_USERS = [];
 
 /* ---------------- Helpers ---------------- */
 const cities = ["Lahore","Karachi","Islamabad","Rawalpindi","Faisalabad","Multan","Peshawar","Quetta","Dubai","Riyadh","London","Manchester","Toronto","New York","Houston"];
@@ -410,9 +411,17 @@ function compatibility(a,b){
   return s;
 }
 
-/* ---------------- Avatars (SVG, no external) ---------------- */
-function Avatar({kind="male", blur=false, size=80}) {
+/* ---------------- Avatars (real photo or SVG fallback) ---------------- */
+function Avatar({kind="male", blur=false, size=80, photo=null}) {
   const bg = kind==="male" ? "#0f766e" : "#be185d";
+  if (photo) {
+    return (
+      <div className={"relative rounded-full overflow-hidden "+(blur?"blur-photo":"")}
+        style={{width:size, height:size}}>
+        <img src={photo} alt="profile" className="w-full h-full object-cover"/>
+      </div>
+    );
+  }
   return (
     <div className={"relative rounded-full overflow-hidden flex items-center justify-center text-white font-bold "+(blur?"blur-photo":"")}
       style={{width:size, height:size, background:`linear-gradient(135deg,${bg},#134e4a)`}}>
@@ -1137,6 +1146,7 @@ function AuthScreen({mode, onAuth, onSwitch}){
 /* ---------------- Profile Setup (Biodata) ---------------- */
 function ProfileSetup({initial, onSave, onCancel}){
   const [step, setStep] = useState(0);
+  const [error, setError] = useState("");
   const [data, setData] = useState({
     name:initial?.name||"", age:initial?.age||"", height:"", maritalStatus:"Never Married",
     gender:initial?.gender||"Male", city:"Lahore", country:"Pakistan", nationality:"Pakistani",
@@ -1152,6 +1162,60 @@ function ProfileSetup({initial, onSave, onCancel}){
   const steps = ["Personal","Education","Family","Religion","Personality","Preferences","Photos & Bio"];
   const update = (k,v)=> setData(d=>({...d,[k]:v}));
   const updatePref = (k,v)=> setData(d=>({...d, preferences:{...d.preferences,[k]:v}}));
+
+  // Required field validation per step
+  const validateStep = ()=>{
+    setError("");
+    if (step === 0) { // Personal
+      if (!data.name || data.name.trim().length < 2) return setError("Please enter your full name"), false;
+      if (!data.age || data.age < 18 || data.age > 80) return setError("Please enter a valid age (18-80)"), false;
+      if (!data.height) return setError("Please enter your height"), false;
+      if (!data.city) return setError("Please select your city"), false;
+      if (!data.country) return setError("Please select your country"), false;
+    } else if (step === 1) { // Education & Career
+      if (!data.qualification) return setError("Please select your qualification"), false;
+      if (!data.profession) return setError("Please select your profession"), false;
+      if (!data.income) return setError("Please select your monthly income"), false;
+    } else if (step === 2) { // Family
+      if (!data.fatherProfession) return setError("Please enter father's profession"), false;
+      if (!data.motherProfession) return setError("Please enter mother's profession"), false;
+      if (!data.siblings) return setError("Please describe siblings (or write 'None')"), false;
+    } else if (step === 3) { // Religion
+      if (!data.namaz) return setError("Please select your namaz frequency"), false;
+      if (!data.religiousLevel) return setError("Please select your religious level"), false;
+    } else if (step === 4) { // Personality
+      if (!data.nature || data.nature.length < 5) return setError("Please describe your nature (at least 5 chars)"), false;
+    } else if (step === 6) { // Photos & Bio
+      if (!data.bio || data.bio.length < 20) return setError("Please write a short bio (at least 20 characters)"), false;
+    }
+    return true;
+  };
+
+  const handleNext = ()=>{ if (validateStep()) { setStep(step+1); setError(""); }};
+
+  // Multi-photo upload handler
+  const onPhotoSelect = (e)=>{
+    const files = Array.from(e.target.files||[]);
+    if (files.length === 0) return;
+    const existing = data.photos || [];
+    if (existing.length + files.length > 5) {
+      setError("Maximum 5 photos allowed");
+      return;
+    }
+    Promise.all(files.map(f=> new Promise((res, rej)=>{
+      if (f.size > 5 * 1024 * 1024) return rej(new Error(f.name+" is larger than 5MB"));
+      const reader = new FileReader();
+      reader.onload = ()=> res(reader.result);
+      reader.onerror = rej;
+      reader.readAsDataURL(f);
+    }))).then(dataUrls=>{
+      update("photos", [...existing, ...dataUrls]);
+      setError("");
+    }).catch(e=> setError(e.message));
+  };
+  const removePhoto = (idx)=>{
+    update("photos", (data.photos||[]).filter((_,i)=>i!==idx));
+  };
 
   return (
     <div className="max-w-3xl mx-auto p-5 pb-28">
@@ -1249,25 +1313,48 @@ function ProfileSetup({initial, onSave, onCancel}){
                   <option>Blurred</option><option>Visible</option>
                 </select>
               </Field>
-              <div className="rounded-xl border-2 border-dashed border-emerald-200 p-5 text-center bg-emerald-50/40">
-                <div className="text-4xl">📷</div>
-                <div className="font-semibold mt-1">Upload Photos (max 5)</div>
-                <div className="text-xs text-gray-500">Demo: photos handled by avatar. In production → Cloudinary/S3 free tier.</div>
-                <div className="mt-2 flex justify-center gap-2">
-                  <span className="chip bg-white border">🎙️ Voice intro (optional)</span>
-                  <span className="chip bg-white border">🎥 Video intro (optional)</span>
+              <div className="rounded-xl border-2 border-dashed border-emerald-200 p-5 bg-emerald-50/40">
+                <div className="text-center">
+                  <div className="text-4xl">📷</div>
+                  <div className="font-semibold mt-1">Upload Photos (max 5)</div>
+                  <div className="text-xs text-gray-500 mb-3">JPG, PNG up to 5MB each. First photo is your main profile photo.</div>
+                  <label className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl btn-primary cursor-pointer text-sm font-semibold">
+                    📎 Choose Photos
+                    <input type="file" accept="image/*" multiple onChange={onPhotoSelect} className="hidden"/>
+                  </label>
+                </div>
+                {(data.photos||[]).length > 0 && (
+                  <div className="mt-4 grid grid-cols-3 md:grid-cols-5 gap-3">
+                    {data.photos.map((src, idx)=>(
+                      <div key={idx} className="relative group">
+                        <img src={src} alt={"Photo "+(idx+1)} className="w-full h-24 object-cover rounded-xl border-2 border-emerald-200"/>
+                        {idx === 0 && <span className="absolute top-1 left-1 chip badge-verified text-[10px]">Main</span>}
+                        <button type="button" onClick={()=>removePhoto(idx)} className="absolute top-1 right-1 w-6 h-6 rounded-full bg-red-600 text-white text-xs opacity-0 group-hover:opacity-100 transition-opacity">✕</button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <div className="mt-3 flex justify-center gap-2">
+                  <span className="chip bg-white border">🎙️ Voice intro (coming soon)</span>
+                  <span className="chip bg-white border">🎥 Video intro (coming soon)</span>
                 </div>
               </div>
             </div>
           )}
         </div>
 
+        {error && (
+          <div className="mt-4 p-3 rounded-xl bg-red-50 border border-red-200 text-red-800 text-sm flex items-start gap-2">
+            <span>⚠️</span><div>{error}</div>
+          </div>
+        )}
+
         <div className="mt-6 flex items-center justify-between">
-          <button onClick={()=> step===0 ? onCancel?.() : setStep(step-1)} className="px-4 py-2 rounded-xl border">{step===0?"Cancel":"Back"}</button>
+          <button onClick={()=>{ setError(""); step===0 ? onCancel?.() : setStep(step-1); }} className="px-4 py-2 rounded-xl border">{step===0?"Cancel":"Back"}</button>
           {step<steps.length-1 ? (
-            <button onClick={()=>setStep(step+1)} className="btn-primary px-5 py-2 rounded-xl font-semibold">Next</button>
+            <button onClick={handleNext} className="btn-primary px-5 py-2 rounded-xl font-semibold">Next</button>
           ) : (
-            <button onClick={()=>onSave(data)} className="btn-primary px-5 py-2 rounded-xl font-semibold">Save Biodata</button>
+            <button onClick={()=>{ if(validateStep()) onSave(data); }} className="btn-primary px-5 py-2 rounded-xl font-semibold">Save Biodata</button>
           )}
         </div>
       </div>
@@ -1283,12 +1370,30 @@ function Field({label, children, full}){
   );
 }
 
-/* ---------------- Home (CRM-style Dashboard) ---------------- */
+/* ---------------- Home (CRM-style Dashboard, real data) ---------------- */
 function Home({user, users, onNav, onOpen}){
+  const [realUsers, setRealUsers] = useState([]);
+  const [stats, setStats] = useState({ profileViews: 0, interests: 0 });
+
+  // Fetch REAL users from backend (not seed data)
+  useEffect(()=>{
+    (async ()=>{
+      const list = await apiSilent("/api/users");
+      if (Array.isArray(list)) setRealUsers(list);
+    })();
+
+    // Real activity stats — from localStorage (could be backend in future)
+    const viewedMe = JSON.parse(localStorage.getItem("rishta_my_views_"+user.id)||"[]");
+    const interestsReceived = JSON.parse(localStorage.getItem("rishta_interests_received_"+user.id)||"[]");
+    setStats({
+      profileViews: viewedMe.length,
+      interests: interestsReceived.length
+    });
+  },[user.id]);
+
   const recommended = useMemo(()=>{
-    const opp = users.filter(u=> u.id!==user.id && u.gender!==user.gender);
-    return opp.map(u=>({...u, score:compatibility(user,u)})).sort((a,b)=>b.score-a.score).slice(0,5);
-  },[users,user]);
+    return realUsers.map(u=>({...u, score:u.score || compatibility(user,u)})).sort((a,b)=>b.score-a.score).slice(0,5);
+  },[realUsers,user]);
 
   // Profile completion %
   const profileFields = ["name","age","height","city","profession","qualification","bio","photos","preferences","familyType","religiousLevel","hobbies"];
@@ -1301,6 +1406,9 @@ function Home({user, users, onNav, onOpen}){
   const meetings = JSON.parse(localStorage.getItem("rishta_meetings_"+user.id)||"[]");
   const upcoming = meetings.filter(m=> new Date(m.date+"T"+m.time) > new Date()).slice(0,2);
   const viewedCount = (JSON.parse(localStorage.getItem("rishta_viewed_profiles")||"[]")).length;
+
+  // Real activity feed
+  const activity = JSON.parse(localStorage.getItem("rishta_activity_"+user.id)||"[]").slice(0,5);
 
   return (
     <div className="max-w-6xl mx-auto p-5 pb-24">
@@ -1319,8 +1427,8 @@ function Home({user, users, onNav, onOpen}){
           </div>
         </div>
         <div className="mt-5 grid grid-cols-2 md:grid-cols-4 gap-3">
-          <Stat label="Profile Views" value="124"/>
-          <Stat label="Interests" value="18"/>
+          <Stat label="Profile Views" value={stats.profileViews}/>
+          <Stat label="Interests" value={stats.interests}/>
           <Stat label="Trust Score" value={(user.trustScore||60)+"/100"}/>
           <Stat label="Plan" value={user.plan||"Free"}/>
         </div>
@@ -1426,35 +1534,58 @@ function Home({user, users, onNav, onOpen}){
         </div>
       </div>
 
-      {/* Recent Activity */}
+      {/* Recent Activity — REAL events only */}
       <div className="bg-white rounded-2xl shadow-card p-5 mt-5">
         <div className="flex items-center justify-between">
           <div className="font-semibold">Recent Activity</div>
           <span className="text-xs text-gray-500">Last 7 days</span>
         </div>
-        <div className="mt-3 space-y-2 text-sm">
-          <ActivityItem icon="💚" text="Hamza Khan sent you an interest" time="2h ago"/>
-          <ActivityItem icon="✅" text="Your CNIC verification approved" time="Yesterday"/>
-          <ActivityItem icon="👁" text="3 new profiles viewed your biodata" time="Yesterday"/>
-          <ActivityItem icon="💬" text="New message from Areeba Fatima" time="2 days ago"/>
-          <ActivityItem icon="📅" text="Family meeting request received" time="3 days ago"/>
+        {activity.length === 0 ? (
+          <div className="mt-4 text-center py-6">
+            <div className="text-4xl opacity-50">📊</div>
+            <div className="text-sm text-gray-500 mt-2">No activity yet</div>
+            <div className="text-xs text-gray-400 mt-1">Send your first interest or message to get started</div>
+          </div>
+        ) : (
+          <div className="mt-3 space-y-2 text-sm">
+            {activity.map((a,i)=> <ActivityItem key={i} icon={a.icon} text={a.text} time={timeAgo(a.time)}/>)}
+          </div>
+        )}
+      </div>
+
+      {recommended.length > 0 && (
+        <>
+          <h3 className="mt-7 font-display text-xl text-gray-800">AI Recommended for You</h3>
+          <p className="font-urdu text-sm text-gray-500">آپ کے لیے تجویز کردہ</p>
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4 mt-4">
+            {recommended.map(u=>(
+              <ProfileCard key={u._id||u.id} u={u} onOpen={()=>onOpen(u)} />
+            ))}
+          </div>
+        </>
+      )}
+
+      {realUsers.filter(u=>u.verifications?.cnic).length > 0 && (
+        <>
+          <h3 className="mt-8 font-display text-xl text-gray-800">Featured Verified Profiles</h3>
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4 mt-4">
+            {realUsers.filter(u=>u.verifications?.cnic).slice(0,3).map(u=>(
+              <ProfileCard key={u._id||u.id} u={{...u, score:u.score || compatibility(user,u)}} onOpen={()=>onOpen(u)} />
+            ))}
+          </div>
+        </>
+      )}
+
+      {realUsers.length === 0 && (
+        <div className="mt-7 bg-cream rounded-2xl border border-emerald-100 p-8 text-center">
+          <div className="text-5xl">🌙</div>
+          <div className="font-display text-xl mt-3">Welcome to RishtaConnect</div>
+          <div className="text-sm text-gray-600 mt-1">
+            Complete your biodata to see AI-recommended matches.
+          </div>
+          <button onClick={()=>onNav("setup")} className="mt-4 btn-primary px-5 py-2 rounded-xl">Complete Biodata →</button>
         </div>
-      </div>
-
-      <h3 className="mt-7 font-display text-xl text-gray-800">AI Recommended for You</h3>
-      <p className="font-urdu text-sm text-gray-500">آپ کے لیے تجویز کردہ</p>
-      <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4 mt-4">
-        {recommended.map(u=>(
-          <ProfileCard key={u.id} u={u} onOpen={()=>onOpen(u)} />
-        ))}
-      </div>
-
-      <h3 className="mt-8 font-display text-xl text-gray-800">Featured Verified Profiles</h3>
-      <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4 mt-4">
-        {users.filter(u=>u.verifications?.cnic && u.id!==user.id).slice(0,3).map(u=>(
-          <ProfileCard key={u.id} u={{...u, score:compatibility(user,u)}} onOpen={()=>onOpen(u)} />
-        ))}
-      </div>
+      )}
     </div>
   );
 }
@@ -1482,7 +1613,7 @@ function ProfileCard({u, onOpen, compact}){
   return (
     <div className="bg-white rounded-2xl shadow-card border border-gray-100 overflow-hidden">
       <div className="p-4 flex items-center gap-3">
-        <Avatar kind={u.gender==="Female"?"female":"male"} blur={u.blurPhoto} size={64}/>
+        <Avatar kind={u.gender==="Female"?"female":"male"} blur={u.blurPhoto} size={64} photo={u.photos?.[0]}/>
         <div className="flex-1">
           <div className="flex items-center gap-2">
             <div className="font-semibold">{u.name}</div>
@@ -1520,6 +1651,18 @@ function SearchView({user, users, onOpen}){
   const saved = (()=>{ try { return JSON.parse(localStorage.getItem("rishta_filters")||"null"); } catch { return null; } })();
   const [q, setQ] = useState(saved?.q || "");
   const [f, setF] = useState(saved?.f || { minAge:20, maxAge:40, city:"", country:"", profession:"", sect:"", verified:false, overseas:false, marital:"" });
+  const [realUsers, setRealUsers] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  // Fetch from real backend
+  useEffect(()=>{
+    (async ()=>{
+      setLoading(true);
+      const list = await apiSilent("/api/users");
+      if (Array.isArray(list)) setRealUsers(list);
+      setLoading(false);
+    })();
+  },[]);
   const [savedViews, setSavedViews] = useState(()=>{ try{ return JSON.parse(localStorage.getItem("rishta_saved_views")||"[]"); } catch { return []; } });
   const [showSaveDialog, setShowSaveDialog] = useState(false);
   const [viewName, setViewName] = useState("");
@@ -1546,10 +1689,11 @@ function SearchView({user, users, onOpen}){
   const clearAll = ()=>{
     setQ(""); setF({ minAge:20, maxAge:40, city:"", country:"", profession:"", sect:"", verified:false, overseas:false, marital:"" });
   };
-  const filtered = users.filter(u=>{
-    if(u.id===user.id || u.gender===user.gender) return false;
-    if(q && !(u.name+u.city+u.profession+u.qualification).toLowerCase().includes(q.toLowerCase())) return false;
-    if(u.age < f.minAge || u.age > f.maxAge) return false;
+  const filtered = realUsers.filter(u=>{
+    const uid = u.id || u._id;
+    if(uid===user.id || u.gender===user.gender) return false;
+    if(q && !((u.name||"")+(u.city||"")+(u.profession||"")+(u.qualification||"")).toLowerCase().includes(q.toLowerCase())) return false;
+    if(u.age != null && (u.age < f.minAge || u.age > f.maxAge)) return false;
     if(f.city && u.city!==f.city) return false;
     if(f.country && u.country!==f.country) return false;
     if(f.profession && u.profession!==f.profession) return false;
@@ -1558,7 +1702,7 @@ function SearchView({user, users, onOpen}){
     if(f.overseas && !u.overseas) return false;
     if(f.marital && u.maritalStatus!==f.marital) return false;
     return true;
-  }).map(u=>({...u, score:compatibility(user,u)})).sort((a,b)=>b.score-a.score);
+  }).map(u=>({...u, score:u.score || compatibility(user,u)})).sort((a,b)=>b.score-a.score);
 
   return (
     <div className="max-w-6xl mx-auto p-5 pb-24">
@@ -1606,26 +1750,55 @@ function SearchView({user, users, onOpen}){
           </div>
         </div>
       </div>
-      <div className="mt-4 text-sm text-gray-600">{filtered.length} results / نتائج</div>
+      <div className="mt-4 text-sm text-gray-600">
+        {loading ? "Loading profiles..." : `${filtered.length} results / نتائج`}
+      </div>
+      {!loading && filtered.length===0 && (
+        <div className="mt-6 bg-white rounded-2xl shadow-card p-10 text-center">
+          <div className="text-5xl opacity-50">🔍</div>
+          <div className="font-display text-xl mt-3">No matches found</div>
+          <div className="text-sm text-gray-500 mt-2">
+            {realUsers.length === 0 ?
+              "No profiles in database yet. New members joining daily — check back soon!" :
+              "Try adjusting your filters or expanding criteria."}
+          </div>
+        </div>
+      )}
       <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4 mt-2">
-        {filtered.map(u=> <ProfileCard key={u.id} u={u} onOpen={()=>onOpen(u)}/>)}
-        {filtered.length===0 && <div className="text-gray-500 italic">No matches. Try adjusting filters.</div>}
+        {filtered.map(u=> <ProfileCard key={u.id||u._id} u={u} onOpen={()=>onOpen(u)}/>)}
       </div>
     </div>
   );
 }
 
-/* ---------------- Matches ---------------- */
+/* ---------------- Matches (real backend) ---------------- */
 function Matches({user, users, onOpen}){
-  const list = users.filter(u=>u.id!==user.id && u.gender!==user.gender)
-    .map(u=>({...u, score:compatibility(user,u)}))
+  const [realUsers, setRealUsers] = useState([]);
+  const [loading, setLoading] = useState(true);
+  useEffect(()=>{
+    (async ()=>{
+      const list = await apiSilent("/api/matches");
+      if (Array.isArray(list)) setRealUsers(list);
+      setLoading(false);
+    })();
+  },[]);
+  const list = realUsers.filter(u=> (u.id||u._id)!==user.id && u.gender!==user.gender)
+    .map(u=>({...u, score:u.score || compatibility(user,u)}))
     .sort((a,b)=>b.score-a.score);
   return (
     <div className="max-w-6xl mx-auto p-5 pb-24">
       <h2 className="font-display text-2xl text-emerald-brand">Your Matches</h2>
       <p className="font-urdu text-gray-500">آپ کے میچز</p>
+      {loading && <div className="text-sm text-gray-500 mt-4">Loading matches...</div>}
+      {!loading && list.length === 0 && (
+        <div className="mt-6 bg-white rounded-2xl shadow-card p-10 text-center">
+          <div className="text-5xl opacity-50">💚</div>
+          <div className="font-display text-xl mt-3">No matches yet</div>
+          <div className="text-sm text-gray-500 mt-2">Complete your biodata and verify your profile to get AI-recommended matches.</div>
+        </div>
+      )}
       <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4 mt-4">
-        {list.map(u=> <ProfileCard key={u.id} u={u} onOpen={()=>onOpen(u)}/>)}
+        {list.map(u=> <ProfileCard key={u.id||u._id} u={u} onOpen={()=>onOpen(u)}/>)}
       </div>
     </div>
   );
@@ -1771,31 +1944,72 @@ function CompatRing({score}){
   );
 }
 
-/* ---------------- Chat ---------------- */
-function ChatView({user, users, messages, sendMessage}){
-  const others = users.filter(u=> u.id!==user.id && u.gender!==user.gender);
-  const [activeId, setActiveId] = useState(others[0]?.id);
-  const active = users.find(u=>u.id===activeId);
+/* ---------------- Chat (real conversations only) ---------------- */
+function ChatView({user, users, messages, sendMessage, onNav}){
+  // Only show conversations that user has actually started (sent/received message)
+  const myConversations = useMemo(()=>{
+    const partners = new Set();
+    Object.keys(messages).forEach(key=>{
+      const [a, b] = key.split("-");
+      if (a === user.id) partners.add(b);
+      else if (b === user.id) partners.add(a);
+    });
+    return Array.from(partners).map(id=>{
+      const partner = users.find(u=>u.id===id || u._id===id);
+      return partner ? partner : null;
+    }).filter(Boolean);
+  },[messages, users, user.id]);
+
+  const [activeId, setActiveId] = useState(myConversations[0]?.id || myConversations[0]?._id);
+  const active = users.find(u=>(u.id===activeId || u._id===activeId));
   const key = [user.id, activeId].sort().join("-");
   const thread = messages[key]||[];
   const [text, setText] = useState("");
   const scrollRef = useRef(null);
   useEffect(()=>{ scrollRef.current?.scrollTo(0,99999); },[thread.length, activeId]);
 
+  // EMPTY STATE — no real conversations yet
+  if (myConversations.length === 0) {
+    return (
+      <div className="max-w-3xl mx-auto p-5 pb-24">
+        <div className="bg-white rounded-3xl shadow-card p-10 text-center">
+          <div className="text-6xl">💬</div>
+          <h2 className="font-display text-2xl mt-3 text-gray-800">No conversations yet</h2>
+          <p className="font-urdu text-gray-500 mt-1">ابھی کوئی گفتگو نہیں</p>
+          <p className="text-sm text-gray-600 mt-3 max-w-md mx-auto">
+            Send interest to someone or message them first. Once you connect, your conversations will appear here — fully encrypted and private.
+          </p>
+          <div className="mt-5 flex flex-wrap gap-2 justify-center">
+            <button onClick={()=>onNav?.("matches")} className="btn-primary px-5 py-2 rounded-xl">💚 Browse Matches</button>
+            <button onClick={()=>onNav?.("search")} className="px-5 py-2 rounded-xl border">🔍 Search Profiles</button>
+          </div>
+          <div className="mt-6 text-xs text-gray-500 max-w-md mx-auto">
+            🔒 All messages are end-to-end encrypted. Phone numbers stay hidden until mutual interest.
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="max-w-6xl mx-auto p-5 pb-24">
       <div className="bg-white rounded-2xl shadow-card overflow-hidden grid md:grid-cols-[280px,1fr] min-h-[560px]">
         <div className="border-r border-gray-100 overflow-y-auto">
-          <div className="p-3 font-semibold border-b">Conversations</div>
-          {others.map(u=>(
-            <button key={u.id} onClick={()=>setActiveId(u.id)} className={"w-full flex items-center gap-3 px-3 py-2 hover:bg-gray-50 "+(activeId===u.id?"bg-emerald-50":"")}>
-              <Avatar kind={u.gender==="Female"?"female":"male"} blur={u.blurPhoto} size={40}/>
-              <div className="text-left flex-1">
-                <div className="font-semibold text-sm">{u.name}</div>
-                <div className="text-xs text-gray-500">{u.city} • {u.profession}</div>
-              </div>
-            </button>
-          ))}
+          <div className="p-3 font-semibold border-b">Conversations ({myConversations.length})</div>
+          {myConversations.map(u=>{
+            const uid = u.id || u._id;
+            const k = [user.id, uid].sort().join("-");
+            const last = (messages[k]||[]).slice(-1)[0];
+            return (
+              <button key={uid} onClick={()=>setActiveId(uid)} className={"w-full flex items-center gap-3 px-3 py-2 hover:bg-gray-50 "+(activeId===uid?"bg-emerald-50":"")}>
+                <Avatar kind={u.gender==="Female"?"female":"male"} blur={u.blurPhoto} size={40}/>
+                <div className="text-left flex-1 overflow-hidden">
+                  <div className="font-semibold text-sm">{u.name}</div>
+                  <div className="text-xs text-gray-500 truncate">{last?.text || (u.city+" • "+u.profession)}</div>
+                </div>
+              </button>
+            );
+          })}
         </div>
         <div className="flex flex-col">
           {active ? (
@@ -1804,7 +2018,7 @@ function ChatView({user, users, messages, sendMessage}){
                 <Avatar kind={active.gender==="Female"?"female":"male"} blur={active.blurPhoto} size={40}/>
                 <div>
                   <div className="font-semibold">{active.name}</div>
-                  <div className="text-xs text-emerald-700">● Encrypted • last seen {active.lastActive}</div>
+                  <div className="text-xs text-emerald-700">● Encrypted • last seen {active.lastActive||"recently"}</div>
                 </div>
                 <div className="ml-auto flex gap-2">
                   <button className="px-3 py-1.5 rounded-lg border text-sm">📞</button>
@@ -1823,15 +2037,15 @@ function ChatView({user, users, messages, sendMessage}){
                 ))}
               </div>
               <div className="p-3 border-t flex items-center gap-2">
-                <button className="px-2 py-2 rounded-lg border">🎙️</button>
-                <button className="px-2 py-2 rounded-lg border">📎</button>
+                <button className="px-2 py-2 rounded-lg border" title="Voice note">🎙️</button>
+                <button className="px-2 py-2 rounded-lg border" title="Attachment">📎</button>
                 <input value={text} onChange={e=>setText(e.target.value)} placeholder="Type a respectful message…" className="inp flex-1"
                   onKeyDown={e=>{ if(e.key==="Enter" && text.trim()){ sendMessage(activeId, text); setText(""); }}}
                 />
                 <button onClick={()=>{ if(text.trim()){ sendMessage(activeId, text); setText(""); }}} className="btn-primary px-4 py-2 rounded-lg">Send</button>
               </div>
             </>
-          ) : <div className="p-10 text-center text-gray-500">No conversations yet.</div>}
+          ) : <div className="p-10 text-center text-gray-500">Select a conversation</div>}
         </div>
       </div>
     </div>
@@ -2655,33 +2869,98 @@ function EditHistory({user}){
   );
 }
 
-/* ---------------- Notifications ---------------- */
-function Notifications(){
-  const items = [
-    { i:"💚", t:"Hamza Khan sent you an interest", time:"2h ago" },
-    { i:"✅", t:"Your CNIC verification approved", time:"Yesterday" },
-    { i:"💬", t:"New message from Areeba Fatima", time:"Yesterday" },
-    { i:"📅", t:"Family meeting request from Sana Iqbal", time:"2 days ago" },
-    { i:"⚠", t:"Your profile edit pending admin review", time:"3 days ago" },
-    { i:"⏳", t:"Subscription expiring in 5 days", time:"3 days ago" }
-  ];
+/* ---------------- Notifications (real user data only) ---------------- */
+function Notifications({user}){
+  // Build notifications from REAL user activity only:
+  //   1. Their pending profile edit (from localStorage)
+  //   2. Subscription expiry (if user.planExpires exists)
+  //   3. Verification status (incomplete)
+  //   4. System welcome (only once for new users)
+  const items = [];
+  const now = Date.now();
+
+  // Pending profile edit
+  const pendingEdit = JSON.parse(localStorage.getItem("rishta_pending_edit_"+user.id)||"null");
+  if (pendingEdit) {
+    items.push({
+      icon: "⏳", text: "Your profile edit is pending admin review",
+      time: timeAgo(new Date(pendingEdit.time)), tag: "pending"
+    });
+  }
+
+  // Subscription expiry warning
+  if (user.planExpires) {
+    const days = Math.ceil((new Date(user.planExpires) - now) / 86400000);
+    if (days > 0 && days <= 7) {
+      items.push({
+        icon: "⏳", text: `Subscription expiring in ${days} day${days===1?"":"s"}`,
+        time: "Important", tag: "subscription"
+      });
+    }
+  }
+
+  // Verification incomplete
+  const v = user.verifications || {};
+  const verifiedCount = ["phone","email","cnic","face","family","business"].filter(k=>v[k]).length;
+  if (verifiedCount < 3) {
+    items.push({
+      icon: "🛡️", text: `Complete your verification (${verifiedCount}/6 done) to boost trust score`,
+      time: "Recommended", tag: "verify"
+    });
+  }
+
+  // Welcome (first-time only)
+  const welcomeShown = localStorage.getItem("rishta_welcome_shown_"+user.id);
+  if (!welcomeShown) {
+    items.push({
+      icon: "🌙", text: "Welcome to RishtaConnect! Complete your biodata to get personalized matches.",
+      time: "Just now", tag: "welcome"
+    });
+    localStorage.setItem("rishta_welcome_shown_"+user.id, "1");
+  }
+
   return (
     <div className="max-w-3xl mx-auto p-5 pb-24">
       <div className="bg-white rounded-2xl shadow-card p-5">
         <h2 className="font-display text-2xl text-emerald-brand">Notifications</h2>
         <p className="font-urdu text-gray-500">اطلاعات</p>
-        <div className="mt-3 space-y-2">
-          {items.map((n,i)=>(
-            <div key={i} className="flex items-center gap-3 p-3 rounded-xl border">
-              <div className="text-2xl">{n.i}</div>
-              <div className="flex-1 text-sm">{n.t}</div>
-              <div className="text-xs text-gray-500">{n.time}</div>
+        {items.length === 0 ? (
+          <div className="mt-6 text-center py-12">
+            <div className="text-6xl">🔔</div>
+            <div className="font-display text-xl mt-3 text-gray-700">No notifications yet</div>
+            <div className="text-sm text-gray-500 mt-1">
+              You'll see updates here when:
             </div>
-          ))}
-        </div>
+            <ul className="mt-3 text-sm text-gray-600 max-w-sm mx-auto text-left space-y-1">
+              <li>💚 Someone sends you interest</li>
+              <li>💬 You receive a new message</li>
+              <li>✅ Verification is approved</li>
+              <li>📅 Meeting requests come in</li>
+              <li>⏳ Profile edits get reviewed</li>
+            </ul>
+          </div>
+        ) : (
+          <div className="mt-3 space-y-2">
+            {items.map((n,i)=>(
+              <div key={i} className="flex items-center gap-3 p-3 rounded-xl border">
+                <div className="text-2xl">{n.icon}</div>
+                <div className="flex-1 text-sm">{n.text}</div>
+                <div className="text-xs text-gray-500">{n.time}</div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
+}
+
+function timeAgo(date){
+  const s = Math.floor((Date.now() - new Date(date)) / 1000);
+  if (s < 60) return s + "s ago";
+  if (s < 3600) return Math.floor(s/60) + "m ago";
+  if (s < 86400) return Math.floor(s/3600) + "h ago";
+  return Math.floor(s/86400) + "d ago";
 }
 
 /* ---------------- Admin Layout (separate dashboard) ---------------- */
@@ -3431,26 +3710,7 @@ function App(){
   const [activeProfile, setActiveProfile] = useState(null);
   const [messages, setMessages] = useState(SEED_MESSAGES);
   const [unreadMsgs, setUnreadMsgs] = useState(0);
-  const [unreadNotifs, setUnreadNotifs] = useState(2);
-  const [notifList, setNotifList] = useState([]);
-
-  // Demo: simulate occasional new notifications/messages with sound
-  useEffect(()=>{
-    if(!user) return;
-    const t = setInterval(()=>{
-      // ~once every 25 seconds add a demo notification (only if not on chat/notifications)
-      if(Math.random() > 0.7 && view !== "chat" && view !== "notifications"){
-        if(Math.random() > 0.5){
-          setUnreadMsgs(n=>n+1);
-          playChime();
-        } else {
-          setUnreadNotifs(n=>n+1);
-          playChime();
-        }
-      }
-    }, 25000);
-    return ()=>clearInterval(t);
-  },[user, view]);
+  const [unreadNotifs, setUnreadNotifs] = useState(0);
 
   // Clear unread when entering respective view
   useEffect(()=>{
@@ -3517,17 +3777,18 @@ function App(){
     }
   };
 
-  const sendMessage = (toId, text)=>{
+  const sendMessage = async (toId, text)=>{
     const key = [user.id, toId].sort().join("-");
     const time = new Date().toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"});
     setMessages(m=>({...m, [key]:[...(m[key]||[]), { from:user.id, text, time }]}));
-    // Simulate a reply after 2-4 seconds (demo)
-    setTimeout(()=>{
-      const replies = ["JazakAllah for your message.", "Walaikum Assalam.", "I will check with my family in sha Allah.", "Could you share more about yourself?"];
-      const reply = replies[Math.floor(Math.random()*replies.length)];
-      setMessages(m=>({...m, [key]:[...(m[key]||[]), { from:toId, text:reply, time:new Date().toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"}) }]}));
-      if (view !== "chat") { setUnreadMsgs(n=>n+1); playChime(); }
-    }, 2000 + Math.random()*2000);
+
+    // Persist to backend (silently — works on Vercel/Railway live)
+    await apiSilent("/api/messages/"+toId, { method:"POST", body:{ text }});
+
+    // Log to user's activity feed (real event)
+    const activity = JSON.parse(localStorage.getItem("rishta_activity_"+user.id)||"[]");
+    activity.unshift({ icon:"💬", text:`You sent a message`, time: new Date().toISOString() });
+    localStorage.setItem("rishta_activity_"+user.id, JSON.stringify(activity.slice(0, 20)));
   };
 
   const isAuthed = !!user;
@@ -3604,7 +3865,7 @@ function App(){
           <Matches user={user} users={users} onOpen={(u)=>setActiveProfile(u)}/>
         )}
         {view==="chat" && user && (
-          <ChatView user={user} users={users} messages={messages} sendMessage={sendMessage}/>
+          <ChatView user={user} users={users} messages={messages} sendMessage={sendMessage} onNav={setView}/>
         )}
         {view==="profile" && user && (
           <MyProfile user={user} setUser={setUser} onLogout={onLogout} onEdit={()=>setView("setup")} onNav={setView}/>
@@ -3616,7 +3877,7 @@ function App(){
           <Subscription user={user} setUser={setUser}/>
         )}
         {view==="family" && user && <Family user={user}/>}
-        {view==="notifications" && user && <Notifications/>}
+        {view==="notifications" && user && <Notifications user={user}/>}
         {view==="editHistory" && user && <EditHistory user={user}/>}
         {view==="matchmakers" && user && <MatchmakersMarketplace user={user}/>}
         {view==="meetings" && user && <Meetings user={user}/>}
