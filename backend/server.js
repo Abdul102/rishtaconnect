@@ -740,6 +740,36 @@ io.on("connection", (socket) => {
   socket.on("typing", ({ to }) => to && io.to(to).emit("typing", { from: socket.user?.id }));
 });
 
+/* ==================== ADMIN BOOTSTRAP (Emergency Reset) ==================== */
+// Use this endpoint ONCE to reset admin password if locked out.
+// Requires the BOOTSTRAP_SECRET env var (set in Railway only, never commit).
+// Default secret = JWT_SECRET if not separately set.
+app.post("/api/bootstrap-admin", async (req, res) => {
+  const secret = req.body.secret;
+  const expected = process.env.BOOTSTRAP_SECRET || JWT_SECRET;
+  if (!secret || secret !== expected) {
+    return res.status(403).json({ error: "Forbidden — wrong bootstrap secret" });
+  }
+  const adminEmail = req.body.email || "admin@rishta.com";
+  const adminPassword = req.body.password || "admin1234";
+  const hash = await bcrypt.hash(adminPassword, 10);
+  const existing = await db.findOne("users", { email: adminEmail });
+  if (existing) {
+    await db.update("users", { _id: existing._id || existing.id }, {
+      password: hash, role: "admin", banned: false, active: true
+    });
+    return res.json({ ok: true, action: "reset", email: adminEmail });
+  }
+  await db.insert("users", {
+    _id: uuid(), name: "Admin", email: adminEmail, password: hash,
+    role: "admin", gender: "Male",
+    verifications: { phone: true, email: true, cnic: true, face: true, family: true, business: true },
+    trustScore: 100, plan: "VIP",
+    createdAt: new Date(), lastActive: new Date()
+  });
+  res.json({ ok: true, action: "created", email: adminEmail });
+});
+
 /* ==================== HEALTH ==================== */
 app.get("/", (req, res) => res.json({
   name: "RishtaConnect API",
@@ -750,15 +780,47 @@ app.get("/", (req, res) => res.json({
 }));
 
 /* ==================== AUTO-SEED ==================== */
-// On first run (empty database) — automatically add demo data so admin can log in.
+// Smart seeding:
+//   1. Always ensures admin@rishta.com exists (even if other users present)
+//   2. Only seeds demo users/blogs/banners if database is completely empty
+async function ensureAdminExists() {
+  const adminEmail = "admin@rishta.com";
+  const existing = await db.findOne("users", { email: adminEmail });
+  if (existing) {
+    // Admin exists but might have role corrupted — ensure it's admin
+    if (existing.role !== "admin") {
+      await db.update("users", { _id: existing._id || existing.id }, { role: "admin" });
+      console.log("✓ Fixed admin role for", adminEmail);
+    } else {
+      console.log("ℹ  Admin user already exists:", adminEmail);
+    }
+    return;
+  }
+  console.log("ℹ  Admin user missing — creating it now…");
+  await db.insert("users", {
+    _id: uuid(), name: "Admin", email: adminEmail,
+    password: await bcrypt.hash("admin1234", 10),
+    role: "admin", gender: "Male",
+    verifications: { phone: true, email: true, cnic: true, face: true, family: true, business: true },
+    trustScore: 100, plan: "VIP",
+    createdAt: new Date(), lastActive: new Date()
+  });
+  console.log("✓ Admin user created → admin@rishta.com / admin1234");
+}
+
 async function autoSeedIfEmpty() {
   try {
-    const users = await db.find("users", {});
-    if (users.length > 0) {
-      console.log(`ℹ  Database has ${users.length} users — skipping auto-seed`);
+    // STEP 1: Always ensure admin exists (independent of database state)
+    await ensureAdminExists();
+
+    // STEP 2: Check if we should seed demo data
+    const allUsers = await db.find("users", {});
+    const nonAdminUsers = allUsers.filter(u => u.role !== "admin");
+    if (nonAdminUsers.length > 0) {
+      console.log(`ℹ  Database has ${nonAdminUsers.length} non-admin users — skipping demo seed`);
       return;
     }
-    console.log("ℹ  Database is empty — running auto-seed…");
+    console.log("ℹ  Database has only admin — seeding demo profiles…");
 
     const demoProfiles = [
       { name: "Zeeshan Ahmed", email: "zeeshan@demo.com", phone: "+923001234567",
@@ -803,13 +865,7 @@ async function autoSeedIfEmpty() {
       });
     }
 
-    // Admin user
-    await db.insert("users", {
-      _id: uuid(), name: "Admin", email: "admin@rishta.com",
-      password: await bcrypt.hash("admin1234", 10),
-      role: "admin", gender: "Male", verifications: {}, trustScore: 100, plan: "VIP",
-      createdAt: new Date(), lastActive: new Date()
-    });
+    // Admin user — already created by ensureAdminExists()
 
     // Sample blogs
     const blogs = [
