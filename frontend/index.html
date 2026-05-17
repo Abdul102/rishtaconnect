@@ -3279,7 +3279,14 @@ function AdminMessageModal({user, onClose, onDone}){
   const send = async ()=>{
     if (!text.trim()) return;
     setSending(true);
-    const r = await apiSilent("/api/admin/users/"+(user._id||user.id)+"/message", { method:"POST", body:{ text }});
+    // Use the standard message endpoint as fallback if /admin endpoint isn't available
+    const uid = user._id || user.id;
+    let r = await apiSilent("/api/admin/users/"+uid+"/message", { method:"POST", body:{ text }});
+    if (!r) {
+      // Fallback to regular message endpoint (works with older backends)
+      r = await apiSilent("/api/messages/"+uid, { method:"POST", body:{ text: "[Admin] "+text }});
+      if (r) r = { ok: true };
+    }
     setSending(false);
     if (r?.ok) { setSent(true); setTimeout(()=>{ onDone(); onClose(); }, 1500); }
     else alert("Failed to send message");
