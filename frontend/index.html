@@ -996,6 +996,7 @@ function AuthScreen({mode, onAuth, onSwitch}){
   const [otp, setOtp] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [devOtp, setDevOtp] = useState(""); // shown when SMTP not configured
 
   // Email validator
   const isValidEmail = (e)=> /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);
@@ -1027,10 +1028,12 @@ function AuthScreen({mode, onAuth, onSwitch}){
 
   const onSignupRequestOTP = async ()=>{
     if (!validateForm()) return;
-    setLoading(true); setError("");
+    setLoading(true); setError(""); setDevOtp("");
     try {
       // Request OTP from backend (sends to phone/email)
-      await apiSilent("/api/auth/otp/send", { method:"POST", body:{ phone: form.phone, email: form.email }});
+      const r = await api("/api/auth/otp/send", { method:"POST", body:{ phone: form.phone, email: form.email }});
+      // If SMTP not configured, backend returns the OTP for testing
+      if (r?.devOtp) setDevOtp(r.devOtp);
       setStep("otp");
     } catch (e) {
       setError(e.message || "Failed to send OTP. Please try again.");
@@ -1122,17 +1125,26 @@ function AuthScreen({mode, onAuth, onSwitch}){
           <div className="mt-5 space-y-3">
             <div className="text-sm text-gray-600">
               📱 We sent a 6-digit OTP to <b>{form.phone}</b> and <b>{form.email}</b>.
-              <div className="mt-2 text-xs bg-amber-50 border border-amber-200 rounded-lg p-2 text-amber-800">
-                <b>Demo mode:</b> Use OTP <b className="font-mono text-base">123456</b> to continue.
-                <br/>(In production: SMS via Twilio/Easypaisa OTP gateway)
-              </div>
+              {devOtp ? (
+                <div className="mt-2 p-3 bg-emerald-50 border-2 border-emerald-300 rounded-xl">
+                  <div className="text-xs font-semibold text-emerald-800 mb-1">📧 Email delivery not configured yet — your OTP:</div>
+                  <div className="text-center font-mono text-3xl font-bold text-emerald-700 tracking-widest my-2">{devOtp}</div>
+                  <div className="text-[10px] text-emerald-700 mt-1">
+                    Once SMTP credentials are added in Railway, OTPs will be emailed directly to users.
+                  </div>
+                </div>
+              ) : (
+                <div className="mt-2 text-xs bg-amber-50 border border-amber-200 rounded-lg p-2 text-amber-800">
+                  ⏱️ Check your email inbox (and spam folder). OTP expires in 10 minutes.
+                </div>
+              )}
             </div>
             <input value={otp} onChange={e=>setOtp(e.target.value.replace(/\D/g,"").slice(0,6))} placeholder="6-digit OTP" className="w-full px-4 py-3 rounded-xl border border-gray-200 tracking-[0.5em] text-center text-2xl font-mono" autoFocus inputMode="numeric" onKeyDown={e=>{ if(e.key==="Enter") onOTPVerify(); }}/>
             <button onClick={onOTPVerify} disabled={loading || otp.length!==6} className="btn-primary w-full py-3 rounded-xl font-semibold disabled:opacity-60 disabled:cursor-not-allowed">
               {loading ? "Verifying..." : "Verify & Create Account"}
             </button>
             <div className="flex items-center justify-between text-sm">
-              <button onClick={()=>{ setStep("form"); setError(""); setOtp(""); }} className="text-gray-600">← Back</button>
+              <button onClick={()=>{ setStep("form"); setError(""); setOtp(""); setDevOtp(""); }} className="text-gray-600">← Back</button>
               <button onClick={onSignupRequestOTP} disabled={loading} className="text-emerald-brand font-semibold">Resend OTP</button>
             </div>
             <div className="text-xs text-gray-500 text-center">🔒 2FA enabled • Encrypted • Backend-verified</div>

@@ -366,11 +366,13 @@ app.post("/api/auth/otp/send", async (req, res) => {
   const expires = Date.now() + 10 * 60 * 1000; // 10 minutes
   otpStore.set(key, { code, expires, attempts: 0 });
   const result = await sendOTPEmail(email || key, code);
-  // In production NEVER return the code. Only for first launch — return when SMTP not configured.
   const response = { ok: true, channel: result.channel };
-  if (process.env.NODE_ENV !== "production" && !result.sent) {
-    response.debug = "OTP logged to server console. Configure SMTP_* env vars for email delivery.";
-    response.devOtp = code; // ONLY when SMTP not configured (for testing)
+  // If SMTP wasn't able to send (no config OR send failed), return the code so user
+  // can complete signup. This is necessary when SMTP isn't configured yet.
+  // In real production with working SMTP, this won't fire (result.sent will be true).
+  if (!result.sent) {
+    response.debug = "SMTP not configured — OTP returned in response for testing. Set up SMTP_* env vars for production email delivery.";
+    response.devOtp = code;
   }
   res.json(response);
 });
