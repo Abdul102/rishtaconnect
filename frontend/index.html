@@ -4255,24 +4255,26 @@ function App(){
   const [unreadMsgs, setUnreadMsgs] = useState(0);
   const [unreadNotifs, setUnreadNotifs] = useState(0);
 
-  // Recompute unread message count from messages + lastRead timestamps
+  // Recompute unread CONVERSATION count (distinct partners with new messages, NOT total message count).
+  // Example: 2 users messaged → badge shows "2", not the number of individual messages.
   const recomputeUnreadMsgs = ()=>{
     if (!user) return;
     const reads = JSON.parse(localStorage.getItem("rishta_msg_reads_"+user.id)||"{}");
-    let count = 0;
+    const partnersWithUnread = new Set();
     Object.entries(messages || {}).forEach(([key, msgs])=>{
       const [a, b] = key.split("-");
       const partnerId = a === user.id ? b : (b === user.id ? a : null);
-      if (!partnerId) return;
+      if (!partnerId || !msgs || !msgs.length) return;
       const lastRead = reads[partnerId] || 0;
-      (msgs||[]).forEach(m=>{
-        if (m.from !== user.id) {
-          const msgTime = typeof m.time === "string" ? new Date("2000-01-01 "+m.time).getTime() : m.time;
-          if (msgTime > lastRead) count++;
-        }
+      // Check if there's any incoming message newer than lastRead
+      const hasUnread = msgs.some(m=>{
+        if (m.from === user.id) return false;
+        const msgTs = m._ts || 0;
+        return msgTs > lastRead;
       });
+      if (hasUnread) partnersWithUnread.add(partnerId);
     });
-    setUnreadMsgs(count);
+    setUnreadMsgs(partnersWithUnread.size);
   };
 
   // Mark a specific conversation as read
@@ -4377,17 +4379,17 @@ function App(){
 
   const sendMessage = async (toId, text)=>{
     const key = [user.id, toId].sort().join("-");
-    const time = new Date().toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"});
-    // Optimistic UI update
-    setMessages(m=>({...m, [key]:[...(m[key]||[]), { from:user.id, text, time }]}));
-    // Persist to backend — real MongoDB save
+    const now = Date.now();
+    const time = new Date(now).toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"});
+    // Optimistic UI update — include _ts for unread tracking
+    setMessages(m=>({...m, [key]:[...(m[key]||[]), { from:user.id, text, time, _ts: now }]}));
     try {
       await api("/api/messages/"+toId, { method:"POST", body:{ text }});
     } catch(e) {
       console.warn("Message send failed:", e.message);
     }
-    // NO activity log for "you sent" — messages have their own icon and counter,
-    // notifications are reserved for non-message events (interests, admin actions, etc.)
+    // Mark this conversation as read since user just sent (they're obviously aware)
+    markConversationRead(toId);
   };
 
   // Fetch real messages from backend for a specific partner
@@ -4399,7 +4401,8 @@ function App(){
       const formatted = list.map(m=>({
         from: m.from,
         text: m.text,
-        time: new Date(m.time).toLocaleTimeString([], { hour:"2-digit", minute:"2-digit" })
+        time: new Date(m.time).toLocaleTimeString([], { hour:"2-digit", minute:"2-digit" }),
+        _ts: new Date(m.time).getTime()
       }));
       setMessages(m=>({ ...m, [key]: formatted }));
     }
@@ -4488,7 +4491,8 @@ function App(){
             }
           }
           lastSeenTimes[partnerId] = latestTs;
-          setMessages(m=>({ ...m, [key]: formatted.map(({_ts,...rest})=>rest) }));
+          // Keep _ts in stored messages so unread tracking can compare properly
+          setMessages(m=>({ ...m, [key]: formatted }));
         }
         firstRun = false;
       } catch(e) {}
@@ -4515,17 +4519,19 @@ function App(){
       socket.on("message", (msg)=>{
         const partnerId = msg.from === user.id ? msg.to : msg.from;
         const key = [user.id, partnerId].sort().join("-");
+        const msgTs = new Date(msg.time || Date.now()).getTime();
         const formatted = {
           from: msg.from, text: msg.text,
-          time: new Date(msg.time || Date.now()).toLocaleTimeString([], { hour:"2-digit", minute:"2-digit" })
+          time: new Date(msgTs).toLocaleTimeString([], { hour:"2-digit", minute:"2-digit" }),
+          _ts: msgTs
         };
         setMessages(m=>{
           const existing = m[key] || [];
-          if (existing.some(x=> x.text === formatted.text && x.from === formatted.from && x.time === formatted.time)) return m;
+          if (existing.some(x=> x.text === formatted.text && x.from === formatted.from && Math.abs((x._ts||0) - msgTs) < 2000)) return m;
           return { ...m, [key]: [...existing, formatted] };
         });
+        // recomputeUnreadMsgs will pick this up on next render (messages dependency)
         if (msg.from !== user.id && !(view === "chat" && chatTargetUser?.id === partnerId)) {
-          setUnreadMsgs(n=>n+1);
           playChime();
         }
         fetchConversations();
