@@ -3103,9 +3103,9 @@ function AdminLayout({user, onExit, onLogout, children}){
   ];
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      {/* Top admin header */}
-      <div className="bg-slate-900 text-white px-5 py-3 flex items-center justify-between sticky top-0 z-30">
+    <div className="min-h-screen bg-slate-100">
+      {/* Top admin header — full width */}
+      <div className="w-full bg-slate-900 text-white px-5 py-3 flex items-center justify-between sticky top-0 z-30 shadow-lg">
         <div className="flex items-center gap-3">
           <div className="w-9 h-9 rounded-lg gradient-hero flex items-center justify-center font-bold">A</div>
           <div>
@@ -3120,9 +3120,9 @@ function AdminLayout({user, onExit, onLogout, children}){
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto grid md:grid-cols-[240px,1fr] gap-0">
-        {/* Sidebar */}
-        <aside className="bg-slate-800 text-slate-200 md:min-h-[calc(100vh-60px)] p-2 md:p-3 sticky md:top-[60px] md:self-start">
+      <div className="grid md:grid-cols-[260px,1fr] gap-0 min-h-[calc(100vh-60px)]">
+        {/* Sidebar — full height, anchored to left edge */}
+        <aside className="bg-slate-800 text-slate-200 md:min-h-[calc(100vh-60px)] p-2 md:p-4 md:sticky md:top-[60px] md:self-start">
           <div className="md:hidden p-2 text-xs text-slate-400">Admin Menu</div>
           <div className="flex md:flex-col gap-1 overflow-x-auto md:overflow-visible scrollbar-hide">
             {menu.map(m=>(
@@ -3133,9 +3133,11 @@ function AdminLayout({user, onExit, onLogout, children}){
           </div>
         </aside>
 
-        {/* Content */}
-        <main className="p-5">
-          <AdminContent tab={tab} go={go}/>
+        {/* Content — constrained for readability but takes full available width */}
+        <main className="p-5 md:p-6 overflow-x-hidden">
+          <div className="max-w-6xl mx-auto">
+            <AdminContent tab={tab} go={go}/>
+          </div>
         </main>
       </div>
     </div>
