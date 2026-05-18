@@ -1983,23 +1983,35 @@ function ChatView({user, users, messages, sendMessage, onNav, chatTarget, clearC
   // Safe helper to get chatTarget user data (only when chatTarget is truthy)
   const targetUser = chatTarget && chatTarget.id && chatTarget.profile ? chatTarget : null;
 
-  // Only show conversations that user has actually started (sent/received message)
+  // Build conversations list from THREE sources:
+  //   1. Backend conversations (most reliable)
+  //   2. Local messages state (real-time / unsaved)
+  //   3. chatTarget (just opened from profile)
   const myConversations = useMemo(()=>{
-    const partners = new Set();
+    const partners = new Map(); // id -> user object
+    // Source 1: backend conversations
+    if (Array.isArray(conversations)) {
+      conversations.forEach(c=>{
+        const pid = c.partner?._id || c.partner?.id;
+        if (pid) partners.set(pid, c.partner);
+      });
+    }
+    // Source 2: local messages
     Object.keys(messages || {}).forEach(key=>{
       const [a, b] = key.split("-");
-      if (a === user.id) partners.add(b);
-      else if (b === user.id) partners.add(a);
+      const partnerId = a === user.id ? b : (b === user.id ? a : null);
+      if (partnerId && !partners.has(partnerId)) {
+        const u = allUsers.find(x=>x.id===partnerId || x._id===partnerId);
+        if (u) partners.set(partnerId, u);
+        else partners.set(partnerId, { _id: partnerId, name: "User" });
+      }
     });
-    // Also include chatTarget user (just opened from profile detail)
-    if (targetUser) partners.add(targetUser.id);
-    return Array.from(partners).map(id=>{
-      const fromList = allUsers.find(u=>u.id===id || u._id===id);
-      if (fromList) return fromList;
-      if (targetUser && targetUser.id === id) return targetUser.profile;
-      return null;
-    }).filter(Boolean);
-  },[messages, allUsers, user.id, targetUser]);
+    // Source 3: chatTarget
+    if (targetUser && !partners.has(targetUser.id)) {
+      partners.set(targetUser.id, targetUser.profile);
+    }
+    return Array.from(partners.values()).filter(Boolean);
+  },[conversations, messages, allUsers, user.id, targetUser]);
 
   // If chatTarget is set, prefer it as activeId; else first conversation
   const [activeId, setActiveId] = useState(targetUser?.id || myConversations[0]?.id || myConversations[0]?._id || null);
@@ -4265,24 +4277,21 @@ function App(){
     }
   };
 
-  // Fetch ALL conversations (threads) for this user — used to populate chat list with real partners
+  // Fetch ALL conversations for current user — combines backend list + local cache
   const [conversations, setConversations] = useState([]);
   const fetchConversations = async ()=>{
     if (!user) return;
     const list = await apiSilent("/api/conversations");
     if (Array.isArray(list)) {
       setConversations(list);
-      // Also populate messages state with last messages
       list.forEach(thread=>{
         const partnerId = thread.partner._id || thread.partner.id;
-        if (thread.lastMessage) {
-          fetchMessages(partnerId);
-        }
+        if (partnerId) fetchMessages(partnerId);
       });
     }
   };
 
-  // Auto-fetch conversations when user enters chat view
+  // Auto-fetch when user enters chat OR when messages change (gives us full picture)
   useEffect(()=>{
     if (view === "chat" && user) {
       fetchConversations();
@@ -4290,50 +4299,98 @@ function App(){
     }
   },[view, chatTargetUser?.id]);
 
-  // Socket.io — real-time message + interest delivery
+  // Background poll — every 5 seconds, fetch new messages for all known partners
+  // This is the FALLBACK when Socket.io fails (Railway free tier sometimes blocks websockets)
+  useEffect(()=>{
+    if (!user) return;
+    let lastSeenTimes = {}; // partnerId -> last message timestamp
+
+    const poll = async ()=>{
+      try {
+        const list = await apiSilent("/api/conversations");
+        if (!Array.isArray(list)) return;
+        setConversations(list);
+        for (const thread of list) {
+          const partnerId = thread.partner._id || thread.partner.id;
+          if (!partnerId) continue;
+          const msgs = await apiSilent("/api/messages/"+partnerId);
+          if (!Array.isArray(msgs)) continue;
+          const key = [user.id, partnerId].sort().join("-");
+          const formatted = msgs.map(m=>({
+            from: m.from, text: m.text,
+            time: new Date(m.time).toLocaleTimeString([], { hour:"2-digit", minute:"2-digit" }),
+            _ts: new Date(m.time).getTime()
+          }));
+          // Detect new INCOMING messages since last check
+          const lastTs = lastSeenTimes[partnerId] || 0;
+          const newIncoming = formatted.filter(m=> m.from !== user.id && m._ts > lastTs);
+          if (newIncoming.length > 0) {
+            // Update unread badge + sound — only if not currently in this chat
+            const inThisChat = view === "chat" && chatTargetUser?.id === partnerId;
+            if (!inThisChat) {
+              setUnreadMsgs(n=> n + newIncoming.length);
+              playChime();
+              // Add notification
+              const activity = JSON.parse(localStorage.getItem("rishta_activity_"+user.id)||"[]");
+              activity.unshift({ icon:"💬", text:`New message from ${thread.partner.name}`, time: new Date().toISOString() });
+              localStorage.setItem("rishta_activity_"+user.id, JSON.stringify(activity.slice(0, 30)));
+            }
+          }
+          lastSeenTimes[partnerId] = Math.max(lastTs, ...formatted.map(m=>m._ts));
+          setMessages(m=>({ ...m, [key]: formatted.map(({_ts,...rest})=>rest) }));
+        }
+      } catch(e) {}
+    };
+
+    // Initial fetch
+    poll();
+    // Repeat every 5s
+    const interval = setInterval(poll, 5000);
+    return ()=> clearInterval(interval);
+  },[user?.id, view, chatTargetUser?.id]);
+
+  // Socket.io — real-time push (instant when working) — runs alongside polling for best UX
   useEffect(()=>{
     if (!user) return;
     const token = localStorage.getItem("rishta_token");
     if (!token || typeof io === "undefined") return;
 
-    const socket = io(API_BASE, { auth: { token }, transports: ["websocket","polling"] });
-    socket.on("connect", ()=> console.log("✓ Socket.io connected"));
-    socket.on("disconnect", ()=> console.log("✗ Socket.io disconnected"));
+    let socket;
+    try {
+      socket = io(API_BASE, { auth: { token }, transports: ["polling","websocket"] });
+      socket.on("connect", ()=> console.log("[Socket.io] Connected — real-time enabled"));
+      socket.on("disconnect", ()=> console.log("[Socket.io] Disconnected"));
+      socket.on("connect_error", (e)=> console.log("[Socket.io] Error:", e.message));
 
-    socket.on("message", (msg)=>{
-      // Incoming message — add to messages state
-      const partnerId = msg.from === user.id ? msg.to : msg.from;
-      const key = [user.id, partnerId].sort().join("-");
-      const formatted = {
-        from: msg.from,
-        text: msg.text,
-        time: new Date(msg.time || Date.now()).toLocaleTimeString([], { hour:"2-digit", minute:"2-digit" })
-      };
-      setMessages(m=>{
-        const existing = m[key] || [];
-        // Avoid duplicate if we just sent it
-        if (existing.some(x=> x.text === formatted.text && x.from === formatted.from)) return m;
-        return { ...m, [key]: [...existing, formatted] };
+      socket.on("message", (msg)=>{
+        const partnerId = msg.from === user.id ? msg.to : msg.from;
+        const key = [user.id, partnerId].sort().join("-");
+        const formatted = {
+          from: msg.from, text: msg.text,
+          time: new Date(msg.time || Date.now()).toLocaleTimeString([], { hour:"2-digit", minute:"2-digit" })
+        };
+        setMessages(m=>{
+          const existing = m[key] || [];
+          if (existing.some(x=> x.text === formatted.text && x.from === formatted.from && x.time === formatted.time)) return m;
+          return { ...m, [key]: [...existing, formatted] };
+        });
+        if (msg.from !== user.id && !(view === "chat" && chatTargetUser?.id === partnerId)) {
+          setUnreadMsgs(n=>n+1);
+          playChime();
+        }
+        fetchConversations();
       });
-      // Update unread badge if not currently viewing chat
-      if (msg.from !== user.id && view !== "chat") {
-        setUnreadMsgs(n=>n+1);
+
+      socket.on("interest", ()=>{
+        setUnreadNotifs(n=>n+1);
         playChime();
-      }
-      // Refresh conversations list to surface new partners
-      fetchConversations();
-    });
+        const activity = JSON.parse(localStorage.getItem("rishta_activity_"+user.id)||"[]");
+        activity.unshift({ icon:"💚", text:`Someone sent you interest`, time: new Date().toISOString() });
+        localStorage.setItem("rishta_activity_"+user.id, JSON.stringify(activity.slice(0, 30)));
+      });
+    } catch(e) { console.log("[Socket.io] init failed:", e.message); }
 
-    socket.on("interest", (data)=>{
-      setUnreadNotifs(n=>n+1);
-      playChime();
-      // Log to activity
-      const activity = JSON.parse(localStorage.getItem("rishta_activity_"+user.id)||"[]");
-      activity.unshift({ icon:"💚", text:`Someone sent you interest`, time: new Date().toISOString() });
-      localStorage.setItem("rishta_activity_"+user.id, JSON.stringify(activity.slice(0, 20)));
-    });
-
-    return ()=> socket.disconnect();
+    return ()=> { if (socket) socket.disconnect(); };
   },[user?.id]);
 
   const isAuthed = !!user;
