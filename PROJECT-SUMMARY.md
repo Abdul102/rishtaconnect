@@ -301,9 +301,10 @@ On startup, if `users` collection is empty:
 
 ## 🔮 Known Pending Items
 
-1. **Real-time chat from profile detail** — Profile detail "Message" button switches to chat view but doesn't auto-select that user's thread. Improvement: pass selected user ID to ChatView.
+1. ~~Real-time chat from profile detail~~ — ✅ Done. Profile detail Message button now opens chat with that specific user via `chatTargetUser` state. ChatView fetches real messages from backend via `fetchMessages(partnerId)`.
 2. **Email SMTP configuration** — Backend code supports it but user needs to add SMTP_HOST/USER/PASS env vars to Railway. Without it, OTPs are logged to Railway console.
 3. **Profile photo display in admin** — Admin user list shows name/email but not photos. Could enhance with avatar column.
+4. **Real-time push updates via Socket.io** — Backend emits socket events but frontend doesn't subscribe yet. Currently uses polling on chat view enter.
 
 ---
 

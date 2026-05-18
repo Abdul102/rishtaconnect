@@ -1945,7 +1945,23 @@ function CompatRing({score}){
 }
 
 /* ---------------- Chat (real conversations only) ---------------- */
-function ChatView({user, users, messages, sendMessage, onNav}){
+function ChatView({user, users, messages, sendMessage, onNav, chatTarget, clearChatTarget, fetchMessages}){
+  // Fetch real users from backend if `users` is stale/empty
+  const [allUsers, setAllUsers] = useState(users);
+  useEffect(()=>{
+    (async ()=>{
+      const list = await apiSilent("/api/users");
+      if (Array.isArray(list) && list.length) {
+        // Merge with passed users + chatTarget profile so we always have data for active partner
+        const merged = [...list];
+        if (chatTarget?.profile) {
+          if (!merged.find(u=>(u._id||u.id)===chatTarget.id)) merged.push(chatTarget.profile);
+        }
+        setAllUsers(merged);
+      }
+    })();
+  },[chatTarget]);
+
   // Only show conversations that user has actually started (sent/received message)
   const myConversations = useMemo(()=>{
     const partners = new Set();
@@ -1954,22 +1970,34 @@ function ChatView({user, users, messages, sendMessage, onNav}){
       if (a === user.id) partners.add(b);
       else if (b === user.id) partners.add(a);
     });
+    // Also include chatTarget user (just opened from profile detail)
+    if (chatTarget?.id) partners.add(chatTarget.id);
     return Array.from(partners).map(id=>{
-      const partner = users.find(u=>u.id===id || u._id===id);
-      return partner ? partner : null;
+      const partner = allUsers.find(u=>u.id===id || u._id===id) ||
+                     (chatTarget?.id===id ? chatTarget.profile : null);
+      return partner;
     }).filter(Boolean);
-  },[messages, users, user.id]);
+  },[messages, allUsers, user.id, chatTarget]);
 
-  const [activeId, setActiveId] = useState(myConversations[0]?.id || myConversations[0]?._id);
-  const active = users.find(u=>(u.id===activeId || u._id===activeId));
+  // If chatTarget is set, prefer it as activeId; else first conversation
+  const [activeId, setActiveId] = useState(chatTarget?.id || myConversations[0]?.id || myConversations[0]?._id);
+  useEffect(()=>{
+    if (chatTarget?.id) setActiveId(chatTarget.id);
+  },[chatTarget]);
+  // Fetch real messages when active user changes
+  useEffect(()=>{
+    if (activeId && fetchMessages) fetchMessages(activeId);
+  },[activeId]);
+  const active = allUsers.find(u=>(u.id===activeId || u._id===activeId)) ||
+                 (chatTarget?.id===activeId ? chatTarget.profile : null);
   const key = [user.id, activeId].sort().join("-");
   const thread = messages[key]||[];
   const [text, setText] = useState("");
   const scrollRef = useRef(null);
   useEffect(()=>{ scrollRef.current?.scrollTo(0,99999); },[thread.length, activeId]);
 
-  // EMPTY STATE — no real conversations yet
-  if (myConversations.length === 0) {
+  // EMPTY STATE — no real conversations yet (and no chat target either)
+  if (myConversations.length === 0 && !chatTarget) {
     return (
       <div className="max-w-3xl mx-auto p-5 pb-24">
         <div className="bg-white rounded-3xl shadow-card p-10 text-center">
@@ -3198,20 +3226,26 @@ function AdminUsersTab({users, reload}){
 
   const banUser = async (id, banned)=>{
     if (!confirm(banned ? "Unban this user?" : "Ban this user?")) return;
-    await apiSilent("/api/admin/users/"+id+(banned?"/unban":"/ban"), { method:"POST" });
-    reload();
+    try {
+      await api("/api/admin/users/"+id+(banned?"/unban":"/ban"), { method:"POST" });
+      reload();
+    } catch(e) { alert("Failed: "+e.message); }
   };
   const deactivate = async (id, active)=>{
     if (!confirm(active===false ? "Activate this user?" : "Deactivate (pause) this user?")) return;
-    await apiSilent("/api/admin/users/"+id+(active===false?"/activate":"/deactivate"), { method:"POST" });
-    reload();
+    try {
+      await api("/api/admin/users/"+id+(active===false?"/activate":"/deactivate"), { method:"POST" });
+      reload();
+    } catch(e) { alert("Failed: "+e.message+"\n\nNote: This requires the latest backend deployment. Make sure Railway is updated."); }
   };
   const deleteUser = async (id, name)=>{
     if (!confirm("PERMANENTLY delete '"+name+"'? Cannot be undone.")) return;
     const t = prompt("Type DELETE to confirm:");
     if (t !== "DELETE") return;
-    await apiSilent("/api/admin/users/"+id, { method:"DELETE" });
-    reload();
+    try {
+      await api("/api/admin/users/"+id, { method:"DELETE" });
+      reload();
+    } catch(e) { alert("Failed: "+e.message); }
   };
 
   return (
@@ -3276,20 +3310,27 @@ function AdminMessageModal({user, onClose, onDone}){
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
+  const [error, setError] = useState("");
   const send = async ()=>{
     if (!text.trim()) return;
-    setSending(true);
-    // Use the standard message endpoint as fallback if /admin endpoint isn't available
+    setError(""); setSending(true);
     const uid = user._id || user.id;
-    let r = await apiSilent("/api/admin/users/"+uid+"/message", { method:"POST", body:{ text }});
-    if (!r) {
-      // Fallback to regular message endpoint (works with older backends)
-      r = await apiSilent("/api/messages/"+uid, { method:"POST", body:{ text: "[Admin] "+text }});
-      if (r) r = { ok: true };
+    try {
+      // Try admin endpoint first; fall back to standard message endpoint
+      let r;
+      try {
+        r = await api("/api/admin/users/"+uid+"/message", { method:"POST", body:{ text }});
+      } catch(e) {
+        r = await api("/api/messages/"+uid, { method:"POST", body:{ text: "[Admin] "+text }});
+      }
+      if (!r) throw new Error("Backend returned empty response");
+      setSent(true);
+      setTimeout(()=>{ onDone?.(); onClose(); }, 1500);
+    } catch(e) {
+      setError(e.message || "Failed to send message");
+    } finally {
+      setSending(false);
     }
-    setSending(false);
-    if (r?.ok) { setSent(true); setTimeout(()=>{ onDone(); onClose(); }, 1500); }
-    else alert("Failed to send message");
   };
   return (
     <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
@@ -3304,6 +3345,7 @@ function AdminMessageModal({user, onClose, onDone}){
           <>
             <div className="font-display text-xl mb-1">Send Message to User</div>
             <div className="text-sm text-gray-500 mb-3">To: <b>{user.name}</b> ({user.email})</div>
+            {error && <div className="mb-3 p-2 rounded bg-red-50 border border-red-200 text-red-800 text-sm">⚠️ {error}</div>}
             <textarea autoFocus rows="5" value={text} onChange={e=>setText(e.target.value)}
               placeholder="Type your message… (will appear with [Admin] prefix in user's chat)"
               className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm"/>
@@ -3335,9 +3377,13 @@ function AdminPasswordModal({user, onClose, onDone}){
     setError("");
     if (pw.length < 6) return setError("Password must be at least 6 characters");
     if (pw !== confirmPw) return setError("Passwords do not match");
-    const r = await apiSilent("/api/admin/users/"+(user._id||user.id)+"/reset-password", { method:"POST", body:{ newPassword: pw }});
-    if (r?.ok) { setDone(true); }
-    else setError("Failed to reset password");
+    try {
+      const r = await api("/api/admin/users/"+(user._id||user.id)+"/reset-password", { method:"POST", body:{ newPassword: pw }});
+      if (r?.ok) setDone(true);
+      else setError("Backend did not confirm the reset. Try again.");
+    } catch(e) {
+      setError(e.message || "Failed to reset password. This requires the latest backend deployment.");
+    }
   };
   return (
     <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
@@ -3390,12 +3436,18 @@ function AdminEditUserModal({user, onClose, onDone}){
     bio: user.bio||""
   });
   const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState("");
   const save = async ()=>{
-    setSaving(true);
-    const r = await apiSilent("/api/admin/users/"+(user._id||user.id), { method:"PUT", body: d });
-    setSaving(false);
-    if (r) { onDone(); onClose(); }
-    else alert("Update failed");
+    setErr(""); setSaving(true);
+    try {
+      const r = await api("/api/admin/users/"+(user._id||user.id), { method:"PUT", body: d });
+      if (!r) throw new Error("No response from server");
+      onDone?.(); onClose();
+    } catch(e) {
+      setErr(e.message || "Update failed");
+    } finally {
+      setSaving(false);
+    }
   };
   return (
     <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
@@ -3417,6 +3469,7 @@ function AdminEditUserModal({user, onClose, onDone}){
           <Field label="Trust Score (0-100)"><input type="number" min="0" max="100" className="inp" value={d.trustScore} onChange={e=>setD({...d, trustScore:+e.target.value})}/></Field>
           <Field label="Bio" full><textarea rows="3" className="inp" value={d.bio} onChange={e=>setD({...d, bio:e.target.value})}/></Field>
         </div>
+        {err && <div className="mt-3 p-2 rounded bg-red-50 border border-red-200 text-red-800 text-sm">⚠️ {err}</div>}
         <div className="mt-5 flex gap-2">
           <button onClick={onClose} className="flex-1 py-2 rounded-xl border">Cancel</button>
           <button onClick={save} disabled={saving} className="flex-1 btn-primary py-2 rounded-xl">{saving?"Saving…":"Save Changes"}</button>
@@ -3986,6 +4039,7 @@ function App(){
   const [users, setUsers] = useState(SEED_USERS);
   const [activeProfile, setActiveProfile] = useState(null);
   const [messages, setMessages] = useState(SEED_MESSAGES);
+  const [chatTargetUser, setChatTargetUser] = useState(null);  // who to auto-open in chat
   const [unreadMsgs, setUnreadMsgs] = useState(0);
   const [unreadNotifs, setUnreadNotifs] = useState(0);
 
@@ -4057,16 +4111,46 @@ function App(){
   const sendMessage = async (toId, text)=>{
     const key = [user.id, toId].sort().join("-");
     const time = new Date().toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"});
+    // Optimistic UI update
     setMessages(m=>({...m, [key]:[...(m[key]||[]), { from:user.id, text, time }]}));
 
-    // Persist to backend (silently — works on Vercel/Railway live)
-    await apiSilent("/api/messages/"+toId, { method:"POST", body:{ text }});
+    // Persist to backend — real MongoDB save
+    try {
+      await api("/api/messages/"+toId, { method:"POST", body:{ text }});
+    } catch(e) {
+      console.warn("Message send failed:", e.message);
+      // Mark message with error indicator (could add UI for this later)
+    }
 
-    // Log to user's activity feed (real event)
+    // Log to user's activity feed
     const activity = JSON.parse(localStorage.getItem("rishta_activity_"+user.id)||"[]");
     activity.unshift({ icon:"💬", text:`You sent a message`, time: new Date().toISOString() });
     localStorage.setItem("rishta_activity_"+user.id, JSON.stringify(activity.slice(0, 20)));
   };
+
+  // Fetch real messages from backend for a specific partner
+  const fetchMessages = async (partnerId)=>{
+    if (!partnerId || !user) return;
+    const list = await apiSilent("/api/messages/"+partnerId);
+    if (Array.isArray(list)) {
+      const key = [user.id, partnerId].sort().join("-");
+      const formatted = list.map(m=>({
+        from: m.from,
+        text: m.text,
+        time: new Date(m.time).toLocaleTimeString([], { hour:"2-digit", minute:"2-digit" })
+      }));
+      setMessages(m=>({ ...m, [key]: formatted }));
+    }
+  };
+
+  // When user navigates to chat or chat target changes, fetch real messages
+  useEffect(()=>{
+    if (view === "chat" && user) {
+      if (chatTargetUser?.id) {
+        fetchMessages(chatTargetUser.id);
+      }
+    }
+  },[view, chatTargetUser?.id]);
 
   const isAuthed = !!user;
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
@@ -4190,7 +4274,7 @@ function App(){
           <Matches user={user} users={users} onOpen={(u)=>setActiveProfile(u)}/>
         )}
         {view==="chat" && user && (
-          <ChatView user={user} users={users} messages={messages} sendMessage={sendMessage} onNav={setView}/>
+          <ChatView user={user} users={users} messages={messages} sendMessage={sendMessage} onNav={setView} chatTarget={chatTargetUser} clearChatTarget={()=>setChatTargetUser(null)} fetchMessages={fetchMessages}/>
         )}
         {view==="profile" && user && (
           <MyProfile user={user} setUser={setUser} onLogout={onLogout} onEdit={()=>setView("setup")} onNav={setView}/>
@@ -4220,8 +4304,31 @@ function App(){
           return (
             <ProfileDetail u={activeProfile} user={user}
               onClose={()=>setActiveProfile(null)}
-              onChat={()=>{ setActiveProfile(null); setView("chat"); }}
-              onInterest={()=>{ alert("Interest sent to "+activeProfile.name+"! In sha Allah."); setActiveProfile(null); }}
+              onChat={()=>{
+                // Open a real conversation thread with this user
+                const targetId = activeProfile.id || activeProfile._id;
+                setChatTargetUser({ id: targetId, profile: activeProfile });
+                // Pre-create empty conversation if none exists
+                const key = [user.id, targetId].sort().join("-");
+                if (!messages[key]) {
+                  setMessages(m=>({ ...m, [key]: [] }));
+                }
+                setActiveProfile(null);
+                setView("chat");
+              }}
+              onInterest={async ()=>{
+                try {
+                  await api("/api/interest/"+(activeProfile._id||activeProfile.id), { method:"POST", body:{} });
+                  // Log activity
+                  const activity = JSON.parse(localStorage.getItem("rishta_activity_"+user.id)||"[]");
+                  activity.unshift({ icon:"💚", text:`You sent interest to ${activeProfile.name}`, time: new Date().toISOString() });
+                  localStorage.setItem("rishta_activity_"+user.id, JSON.stringify(activity.slice(0, 20)));
+                  alert("Interest sent to "+activeProfile.name+"! In sha Allah.");
+                } catch(e) {
+                  alert("Could not send interest: "+e.message);
+                }
+                setActiveProfile(null);
+              }}
             />
           );
         })()}
