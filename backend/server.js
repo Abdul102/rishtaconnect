@@ -440,8 +440,20 @@ app.put("/api/me", auth, async (req, res) => {
 /* ==================== SEARCH / MATCH ==================== */
 app.get("/api/users", auth, async (req, res) => {
   const me = await db.findOne("users", { _id: req.user.id });
+  if (!me) return res.status(404).json({ error: "User not found" });
   const allUsers = await db.find("users", {});
-  let list = allUsers.filter(u => (u._id || u.id) !== (me._id || me.id) && u.gender !== me.gender && !u.banned);
+
+  // Admin sees all users
+  // Regular users see everyone except: self, banned, admin role.
+  // Opposite gender preferred but if there are no opposite-gender users, also include same gender so the platform feels populated.
+  let list;
+  if (me.role === "admin") {
+    list = allUsers.filter(u => (u._id || u.id) !== (me._id || me.id));
+  } else {
+    const allNonSelf = allUsers.filter(u => (u._id || u.id) !== (me._id || me.id) && !u.banned && u.role !== "admin");
+    const opposite = allNonSelf.filter(u => me.gender && u.gender && u.gender !== me.gender);
+    list = opposite.length > 0 ? opposite : allNonSelf;
+  }
 
   const { city, country, profession, sect, verified, overseas, minAge, maxAge, q } = req.query;
   if (city) list = list.filter(u => u.city === city);
@@ -459,12 +471,13 @@ app.get("/api/users", auth, async (req, res) => {
 
   list = list.map(u => ({
     ...sanitize(u),
-    email: undefined,
-    phone: me.plan === "Free" ? undefined : u.phone,
+    email: me.role === "admin" ? u.email : undefined,
+    phone: (me.role === "admin" || me.plan !== "Free") ? u.phone : undefined,
     score: compatibility(me, u)
-  })).sort((a, b) => b.score - a.score);
+  })).sort((a, b) => (b.score || 0) - (a.score || 0));
 
-  if (me.plan === "Free") list = list.slice(0, 10);
+  // Free plan limit only for regular users
+  if (me.role !== "admin" && me.plan === "Free") list = list.slice(0, 20);
   res.json(list);
 });
 
@@ -880,14 +893,16 @@ async function autoSeedIfEmpty() {
     // STEP 1: Always ensure admin exists (independent of database state)
     await ensureAdminExists();
 
-    // STEP 2: Check if we should seed demo data
+    // STEP 2: Ensure demo profiles exist if database is small (so browsing isn't empty)
     const allUsers = await db.find("users", {});
-    const nonAdminUsers = allUsers.filter(u => u.role !== "admin");
-    if (nonAdminUsers.length > 0) {
-      console.log(`ℹ  Database has ${nonAdminUsers.length} non-admin users — skipping demo seed`);
+    const nonAdminCount = allUsers.filter(u => u.role !== "admin").length;
+    // Check if our seed users exist
+    const hasDemoUsers = allUsers.some(u => u.email === "zeeshan@demo.com");
+    if (hasDemoUsers || nonAdminCount >= 6) {
+      console.log(`ℹ  Database has ${nonAdminCount} non-admin users — skipping demo seed`);
       return;
     }
-    console.log("ℹ  Database has only admin — seeding demo profiles…");
+    console.log(`ℹ  Only ${nonAdminCount} non-admin users found — adding demo profiles for browsing variety…`);
 
     const demoProfiles = [
       { name: "Zeeshan Ahmed", email: "zeeshan@demo.com", phone: "+923001234567",
