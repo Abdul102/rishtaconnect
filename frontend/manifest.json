@@ -1,0 +1,26 @@
+{
+  "name": "RishtaConnect",
+  "short_name": "RishtaConnect",
+  "description": "Trusted Muslim Matrimony Platform — verified profiles, AI matching, family-friendly",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#fbf7f0",
+  "theme_color": "#0f766e",
+  "icons": [
+    {
+      "src": "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192'><rect width='192' height='192' rx='40' fill='%230f766e'/><text x='50%25' y='62%25' font-family='Inter,sans-serif' font-size='110' font-weight='700' fill='white' text-anchor='middle'>R</text></svg>",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'><rect width='512' height='512' rx='110' fill='%230f766e'/><text x='50%25' y='62%25' font-family='Inter,sans-serif' font-size='290' font-weight='700' fill='white' text-anchor='middle'>R</text></svg>",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["lifestyle", "social"],
+  "lang": "en-PK"
+}

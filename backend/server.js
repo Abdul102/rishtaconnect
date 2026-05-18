@@ -443,19 +443,18 @@ app.get("/api/users", auth, async (req, res) => {
   if (!me) return res.status(404).json({ error: "User not found" });
   const allUsers = await db.find("users", {});
 
-  // Admin sees all users
-  // Regular users see everyone except: self, banned, admin role.
-  // Opposite gender preferred but if there are no opposite-gender users, also include same gender so the platform feels populated.
+  // Admin sees all users (including admins/banned)
+  // Regular users see EVERYONE except: self, banned, admin role — no gender filter by default.
+  // User can apply their own gender filter via UI.
   let list;
   if (me.role === "admin") {
     list = allUsers.filter(u => (u._id || u.id) !== (me._id || me.id));
   } else {
-    const allNonSelf = allUsers.filter(u => (u._id || u.id) !== (me._id || me.id) && !u.banned && u.role !== "admin");
-    const opposite = allNonSelf.filter(u => me.gender && u.gender && u.gender !== me.gender);
-    list = opposite.length > 0 ? opposite : allNonSelf;
+    list = allUsers.filter(u => (u._id || u.id) !== (me._id || me.id) && !u.banned && u.role !== "admin");
   }
 
-  const { city, country, profession, sect, verified, overseas, minAge, maxAge, q } = req.query;
+  const { city, country, profession, sect, verified, overseas, minAge, maxAge, q, gender } = req.query;
+  if (gender) list = list.filter(u => u.gender === gender);
   if (city) list = list.filter(u => u.city === city);
   if (country) list = list.filter(u => u.country === country);
   if (profession) list = list.filter(u => u.profession === profession);
