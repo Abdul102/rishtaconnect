@@ -2199,7 +2199,7 @@ function ChatView({user, users, messages, sendMessage, onNav, chatTarget, clearC
           </div>
         </div>
         {/* RIGHT — header fixed, messages scroll, input fixed */}
-        <div className="flex flex-col h-full">
+        <div className="flex flex-col h-full min-h-0 overflow-hidden">
           {active ? (
             <>
               <div className="p-3 border-b flex items-center gap-3 bg-white shrink-0">
@@ -2225,7 +2225,7 @@ function ChatView({user, users, messages, sendMessage, onNav, chatTarget, clearC
                   }} className="px-3 py-1.5 rounded-lg border text-sm hover:bg-emerald-50" title="Video call (Jitsi)">🎥</button>
                 </div>
               </div>
-              <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-2 bg-cream">
+              <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto p-4 space-y-2 bg-cream">
                 {thread.length===0 && <div className="text-center text-sm text-gray-500">Start the conversation respectfully. Assalamu Alaikum 🌙</div>}
                 {thread.map((m,i)=>{
                   const isImage = m.text?.startsWith("🖼️ Image\ndata:image");
@@ -4380,19 +4380,14 @@ function App(){
     const time = new Date().toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"});
     // Optimistic UI update
     setMessages(m=>({...m, [key]:[...(m[key]||[]), { from:user.id, text, time }]}));
-
     // Persist to backend — real MongoDB save
     try {
       await api("/api/messages/"+toId, { method:"POST", body:{ text }});
     } catch(e) {
       console.warn("Message send failed:", e.message);
-      // Mark message with error indicator (could add UI for this later)
     }
-
-    // Log to user's activity feed
-    const activity = JSON.parse(localStorage.getItem("rishta_activity_"+user.id)||"[]");
-    activity.unshift({ icon:"💬", text:`You sent a message`, time: new Date().toISOString() });
-    localStorage.setItem("rishta_activity_"+user.id, JSON.stringify(activity.slice(0, 20)));
+    // NO activity log for "you sent" — messages have their own icon and counter,
+    // notifications are reserved for non-message events (interests, admin actions, etc.)
   };
 
   // Fetch real messages from backend for a specific partner
@@ -4487,9 +4482,8 @@ function App(){
               const inThisChat = view === "chat" && chatTargetUser?.id === partnerId;
               if (!inThisChat) {
                 playChime();
-                const activity = JSON.parse(localStorage.getItem("rishta_activity_"+user.id)||"[]");
-                activity.unshift({ icon:"💬", text:`New message from ${thread.partner.name}`, time: new Date().toISOString() });
-                localStorage.setItem("rishta_activity_"+user.id, JSON.stringify(activity.slice(0, 50)));
+                // Note: Messages don't add to "notifications" feed — they have their own
+                // 💬 icon and unread count is automatically computed from messages state.
               }
             }
           }
@@ -4726,11 +4720,8 @@ function App(){
               onInterest={async ()=>{
                 try {
                   await api("/api/interest/"+(activeProfile._id||activeProfile.id), { method:"POST", body:{} });
-                  // Log activity
-                  const activity = JSON.parse(localStorage.getItem("rishta_activity_"+user.id)||"[]");
-                  activity.unshift({ icon:"💚", text:`You sent interest to ${activeProfile.name}`, time: new Date().toISOString() });
-                  localStorage.setItem("rishta_activity_"+user.id, JSON.stringify(activity.slice(0, 20)));
-                  alert("Interest sent to "+activeProfile.name+"! In sha Allah.");
+                  // No notification entry for own-sent interest — only recipient sees it
+                  alert("✓ Interest sent to "+activeProfile.name+"! In sha Allah.");
                 } catch(e) {
                   alert("Could not send interest: "+e.message);
                 }
