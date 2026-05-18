@@ -2048,20 +2048,15 @@ function ChatView({user, users, messages, sendMessage, onNav, chatTarget, clearC
   // Safe helper to get chatTarget user data (only when chatTarget is truthy)
   const targetUser = chatTarget && chatTarget.id && chatTarget.profile ? chatTarget : null;
 
-  // Build conversations list from THREE sources:
-  //   1. Backend conversations (most reliable)
-  //   2. Local messages state (real-time / unsaved)
-  //   3. chatTarget (just opened from profile)
+  // Build conversations from THREE sources, then sort by latest message
   const myConversations = useMemo(()=>{
-    const partners = new Map(); // id -> user object
-    // Source 1: backend conversations
+    const partners = new Map();
     if (Array.isArray(conversations)) {
       conversations.forEach(c=>{
         const pid = c.partner?._id || c.partner?.id;
         if (pid) partners.set(pid, c.partner);
       });
     }
-    // Source 2: local messages
     Object.keys(messages || {}).forEach(key=>{
       const [a, b] = key.split("-");
       const partnerId = a === user.id ? b : (b === user.id ? a : null);
@@ -2071,12 +2066,31 @@ function ChatView({user, users, messages, sendMessage, onNav, chatTarget, clearC
         else partners.set(partnerId, { _id: partnerId, name: "User" });
       }
     });
-    // Source 3: chatTarget
     if (targetUser && !partners.has(targetUser.id)) {
       partners.set(targetUser.id, targetUser.profile);
     }
-    return Array.from(partners.values()).filter(Boolean);
+    // Sort by latest message timestamp (newest first)
+    return Array.from(partners.values()).filter(Boolean).map(u=>{
+      const uid = u.id || u._id;
+      const k = [user.id, uid].sort().join("-");
+      const msgs = messages[k] || [];
+      const last = msgs[msgs.length-1];
+      return { user: u, lastTs: last?._ts || 0, lastText: last?.text || "", lastTime: last?.time };
+    }).sort((a,b)=> b.lastTs - a.lastTs).map(x=> ({ ...x.user, _lastTs: x.lastTs, _lastText: x.lastText, _lastTime: x.lastTime }));
   },[conversations, messages, allUsers, user.id, targetUser]);
+
+  // Chat search filter
+  const [chatSearch, setChatSearch] = useState("");
+  const filteredConversations = useMemo(()=>{
+    if (!chatSearch.trim()) return myConversations;
+    const q = chatSearch.toLowerCase();
+    return myConversations.filter(u=>
+      (u.name || "").toLowerCase().includes(q) ||
+      (u.email || "").toLowerCase().includes(q) ||
+      (u.city || "").toLowerCase().includes(q) ||
+      (u._lastText || "").toLowerCase().includes(q)
+    );
+  },[myConversations, chatSearch]);
 
   // If chatTarget is set, prefer it as activeId; else first conversation
   const [activeId, setActiveId] = useState(targetUser?.id || myConversations[0]?.id || myConversations[0]?._id || null);
@@ -2178,24 +2192,57 @@ function ChatView({user, users, messages, sendMessage, onNav, chatTarget, clearC
       <div className="bg-white rounded-2xl shadow-card overflow-hidden grid md:grid-cols-[300px,1fr] h-[calc(100vh-180px)] min-h-[560px]">
         {/* LEFT SIDEBAR — fixed/sticky, only scrolls if many convos */}
         <div className="border-r border-gray-100 flex flex-col bg-white">
-          <div className="p-3 font-semibold border-b sticky top-0 bg-white z-10">Conversations ({myConversations.length})</div>
-          <div className="flex-1 overflow-y-auto">
-            {myConversations.map(u=>{
+          <div className="p-3 border-b sticky top-0 bg-white z-10 shrink-0">
+            <div className="font-semibold">Conversations ({myConversations.length})</div>
+            <div className="mt-2 relative">
+              <input
+                value={chatSearch}
+                onChange={e=>setChatSearch(e.target.value)}
+                placeholder="🔍 Search by name or message..."
+                className="w-full px-3 py-1.5 rounded-lg border border-gray-200 text-sm focus:outline-none focus:border-emerald-400"
+              />
+              {chatSearch && (
+                <button onClick={()=>setChatSearch("")} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 text-sm">✕</button>
+              )}
+            </div>
+          </div>
+          <div className="flex-1 min-h-0 overflow-y-auto">
+            {filteredConversations.map((u, idx)=>{
               const uid = u.id || u._id;
               const k = [user.id, uid].sort().join("-");
-              const last = (messages[k]||[]).slice(-1)[0];
+              const msgs = messages[k] || [];
+              const last = msgs[msgs.length-1];
+              // Compute per-conversation unread for this partner
+              const reads = JSON.parse(localStorage.getItem("rishta_msg_reads_"+user.id)||"{}");
+              const lastRead = reads[uid] || 0;
+              const unread = msgs.filter(m=> m.from !== user.id && (m._ts||0) > lastRead).length;
+              const isActive = activeId===uid;
+              const isTop = idx === 0 && filteredConversations.length > 1;
               return (
-                <button key={uid} onClick={()=>setActiveId(uid)} className={"w-full flex items-center gap-3 px-3 py-2 hover:bg-gray-50 border-b border-gray-50 "+(activeId===uid?"bg-emerald-50":"")}>
-                  <Avatar kind={u.gender==="Female"?"female":"male"} blur={u.blurPhoto} size={40} photo={u.photos?.[0]}/>
+                <button key={uid} onClick={()=>setActiveId(uid)} className={"w-full flex items-center gap-3 px-3 py-2.5 hover:bg-gray-50 border-b border-gray-50 transition-colors "+(isActive?"bg-emerald-50":"")+(isTop && !isActive?" bg-emerald-50/30":"")}>
+                  <Avatar kind={u.gender==="Female"?"female":"male"} blur={u.blurPhoto} size={42} photo={u.photos?.[0]}/>
                   <div className="text-left flex-1 overflow-hidden">
-                    <div className="font-semibold text-sm truncate">{u.name}</div>
-                    <div className="text-xs text-gray-500 truncate">{last?.text?.startsWith("data:") ? "📎 Attachment" : (last?.text?.slice(0, 35) || (u.city+" • "+u.profession))}</div>
+                    <div className="flex items-center justify-between gap-2">
+                      <div className={"font-semibold text-sm truncate "+(unread>0?"text-gray-900":"")}>{u.name}</div>
+                      {last && <div className="text-[10px] text-gray-400 whitespace-nowrap">{last.time}</div>}
+                    </div>
+                    <div className="flex items-center justify-between gap-2 mt-0.5">
+                      <div className={"text-xs truncate "+(unread>0?"text-gray-800 font-medium":"text-gray-500")}>
+                        {last?.text?.startsWith("data:") ? "📎 Attachment" : (last?.text?.slice(0, 32) || (u.city+" • "+u.profession))}
+                      </div>
+                      {unread>0 && (
+                        <span className="bg-emerald-500 text-white text-[10px] font-bold rounded-full min-w-[18px] h-[18px] px-1.5 flex items-center justify-center">{unread>9?"9+":unread}</span>
+                      )}
+                    </div>
                   </div>
-                  {last && <div className="text-[10px] text-gray-400 whitespace-nowrap">{last.time}</div>}
                 </button>
               );
             })}
-            {myConversations.length === 0 && <div className="p-4 text-center text-xs text-gray-500 italic">No conversations yet</div>}
+            {filteredConversations.length === 0 && (
+              <div className="p-4 text-center text-xs text-gray-500 italic">
+                {chatSearch ? "No conversation found" : "No conversations yet"}
+              </div>
+            )}
           </div>
         </div>
         {/* RIGHT — header fixed, messages scroll, input fixed */}
