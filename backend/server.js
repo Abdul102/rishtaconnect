@@ -491,6 +491,55 @@ app.get("/api/messages/:other", auth, async (req, res) => {
   res.json(await db.findMessages(key));
 });
 
+// Get list of all conversations (threads) for current user
+app.get("/api/conversations", auth, async (req, res) => {
+  const myId = req.user.id;
+  try {
+    let threads = [];
+    if (USE_MONGO && mongoReady) {
+      // Find all messages involving this user
+      const msgs = await M.Message.find({ $or: [{ from: myId }, { to: myId }] }).sort({ time: 1 }).lean();
+      const map = new Map();
+      for (const m of msgs) {
+        const partnerId = m.from === myId ? m.to : m.from;
+        if (!partnerId) continue;
+        if (!map.has(partnerId)) map.set(partnerId, { partnerId, lastMessage: m, unread: 0 });
+        else map.get(partnerId).lastMessage = m;
+      }
+      // Hydrate with partner user info
+      const partnerIds = Array.from(map.keys());
+      const users = await M.User.find({ _id: { $in: partnerIds } }).lean();
+      const usersById = Object.fromEntries(users.map(u => [u._id, u]));
+      threads = partnerIds.map(pid => ({
+        partner: usersById[pid] ? sanitize(usersById[pid]) : { _id: pid, name: "Unknown user" },
+        lastMessage: map.get(pid).lastMessage
+      }));
+    } else {
+      // JSON fallback
+      const data = loadJSONDB();
+      const partners = new Set();
+      Object.entries(data.messages || {}).forEach(([key, msgs]) => {
+        const [a, b] = key.split("-");
+        if (a === myId) partners.add(b);
+        else if (b === myId) partners.add(a);
+      });
+      for (const pid of partners) {
+        const key = [myId, pid].sort().join("-");
+        const msgs = data.messages[key] || [];
+        const partner = (data.users || []).find(u => (u._id || u.id) === pid);
+        threads.push({
+          partner: partner ? sanitize(partner) : { _id: pid, name: "Unknown" },
+          lastMessage: msgs[msgs.length - 1]
+        });
+      }
+    }
+    res.json(threads);
+  } catch (e) {
+    console.error("conversations endpoint:", e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 app.post("/api/messages/:other", auth, async (req, res) => {
   const key = [req.user.id, req.params.other].sort().join("-");
   const msg = { _id: uuid(), from: req.user.id, to: req.params.other, text: req.body.text, time: new Date() };
