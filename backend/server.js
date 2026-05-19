@@ -34,7 +34,8 @@ app.set("trust proxy", 1);
 
 app.use(helmet({ contentSecurityPolicy: false }));
 app.use(cors({ origin: "*" }));
-app.use(express.json({ limit: "10mb" }));
+app.use(express.json({ limit: "50mb" }));
+app.use(express.urlencoded({ limit: "50mb", extended: true }));
 app.use(rateLimit({ windowMs: 60 * 1000, max: 300, standardHeaders: true, legacyHeaders: false }));
 
 /* ==================== DATABASE LAYER ==================== */
@@ -43,7 +44,13 @@ const USE_MONGO = !!MONGO_URI;
 let mongoReady = false;
 const DB_PATH = path.join(__dirname, "db.json");
 
-const collections = ["users", "blogs", "banners", "contacts", "settings", "interests", "reports", "pendingEdits", "subscriptions", "activityLogs"];
+const collections = [
+  "users", "blogs", "banners", "contacts", "settings", "interests", "reports",
+  "pendingEdits", "subscriptions", "activityLogs",
+  // New collections for advanced features
+  "profileViews", "superLikes", "boosts", "stories", "successStories",
+  "blocks", "fraudFlags", "presence", "messageReads", "credits"
+];
 const messagesKey = "messages";
 
 /* ---- Mongoose Schemas ---- */
@@ -124,12 +131,29 @@ function buildModels() {
   M.PendingEdit = mongoose.model("PendingEdit", SimpleSchema("pendingEdits"));
   M.Subscription = mongoose.model("Subscription", SimpleSchema("subscriptions"));
   M.ActivityLog = mongoose.model("ActivityLog", SimpleSchema("activityLogs"));
+  // Advanced feature models
+  M.ProfileView = mongoose.model("ProfileView", SimpleSchema("profileViews"));
+  M.SuperLike = mongoose.model("SuperLike", SimpleSchema("superLikes"));
+  M.Boost = mongoose.model("Boost", SimpleSchema("boosts"));
+  M.Story = mongoose.model("Story", SimpleSchema("stories"));
+  M.SuccessStory = mongoose.model("SuccessStory", SimpleSchema("successStories"));
+  M.Block = mongoose.model("Block", SimpleSchema("blocks"));
+  M.FraudFlag = mongoose.model("FraudFlag", SimpleSchema("fraudFlags"));
+  M.Presence = mongoose.model("Presence", SimpleSchema("presence"));
+  M.MessageRead = mongoose.model("MessageRead", SimpleSchema("messageReads"));
+  M.Credit = mongoose.model("Credit", SimpleSchema("credits"));
 }
 
 /* ---- JSON file fallback ---- */
 function loadJSONDB() {
   if (!fs.existsSync(DB_PATH)) {
-    const seed = { users: [], blogs: [], banners: [], contacts: [], settings: [{ _id: "site", siteName: "RishtaConnect" }], messages: {}, interests: [], reports: [], pendingEdits: [], subscriptions: [], activityLogs: [] };
+    const seed = {
+      users: [], blogs: [], banners: [], contacts: [],
+      settings: [{ _id: "site", siteName: "RishtaConnect" }],
+      messages: {}, interests: [], reports: [], pendingEdits: [], subscriptions: [], activityLogs: [],
+      profileViews: [], superLikes: [], boosts: [], stories: [], successStories: [],
+      blocks: [], fraudFlags: [], presence: [], messageReads: [], credits: []
+    };
     fs.writeFileSync(DB_PATH, JSON.stringify(seed, null, 2));
   }
   return JSON.parse(fs.readFileSync(DB_PATH, "utf-8"));
@@ -213,7 +237,11 @@ function mongoModelFor(col) {
     users: M.User, blogs: M.Blog, banners: M.Banner, contacts: M.Contact,
     settings: M.Settings, interests: M.Interest, reports: M.Report,
     pendingEdits: M.PendingEdit, subscriptions: M.Subscription,
-    activityLogs: M.ActivityLog, messages: M.Message
+    activityLogs: M.ActivityLog, messages: M.Message,
+    profileViews: M.ProfileView, superLikes: M.SuperLike, boosts: M.Boost,
+    stories: M.Story, successStories: M.SuccessStory, blocks: M.Block,
+    fraudFlags: M.FraudFlag, presence: M.Presence,
+    messageReads: M.MessageRead, credits: M.Credit
   };
   return map[col];
 }
@@ -405,18 +433,34 @@ app.get("/api/me", auth, async (req, res) => {
   res.json(sanitize(user));
 });
 
+// Deep equality for arrays/objects (used to avoid flagging unchanged fields as "changed")
+function deepEq(a, b) {
+  if (a === b) return true;
+  if (a == null || b == null) return a === b;
+  if (typeof a !== typeof b) return false;
+  if (typeof a !== "object") return a === b;
+  try { return JSON.stringify(a) === JSON.stringify(b); } catch { return false; }
+}
+
 app.put("/api/me", auth, async (req, res) => {
   const user = await db.findOne("users", { _id: req.user.id });
   if (!user) return res.status(404).json({ error: "Not found" });
 
-  const sensitive = ["name", "age", "income", "city", "maritalStatus", "phone", "photos"];
+  // Photos are NOT sensitive — users can re-upload freely (no admin review).
+  // Sensitive identity/finance fields still require admin review.
+  const sensitive = ["name", "age", "income", "city", "maritalStatus", "phone"];
+  const banned = new Set(["_id", "id", "password", "role", "email", "trustScore", "verifications", "banned", "createdAt"]);
   const changes = {};
   const directUpdates = {};
   Object.keys(req.body).forEach(k => {
-    if (sensitive.includes(k) && user[k] !== req.body[k]) {
-      changes[k] = { old: user[k], new: req.body[k] };
-    } else if (k !== "_id" && k !== "id" && k !== "password" && k !== "role") {
-      directUpdates[k] = req.body[k];
+    if (banned.has(k)) return;
+    const newVal = req.body[k];
+    const oldVal = user[k];
+    if (deepEq(oldVal, newVal)) return; // skip unchanged
+    if (sensitive.includes(k)) {
+      changes[k] = { old: oldVal, new: newVal };
+    } else {
+      directUpdates[k] = newVal;
     }
   });
 
@@ -426,15 +470,36 @@ app.put("/api/me", auth, async (req, res) => {
       status: "pending", createdAt: new Date()
     });
   }
-  directUpdates.trustScore = computeTrustScore({ ...user, ...directUpdates });
-  await db.update("users", { _id: req.user.id }, directUpdates);
+  if (Object.keys(directUpdates).length) {
+    directUpdates.trustScore = computeTrustScore({ ...user, ...directUpdates });
+    directUpdates.updatedAt = new Date();
+    await db.update("users", { _id: req.user.id }, directUpdates);
+  }
 
   const updated = await db.findOne("users", { _id: req.user.id });
   res.json({
     user: sanitize(updated),
     pendingChanges: Object.keys(changes).length,
-    message: Object.keys(changes).length ? "Sensitive changes are pending admin review." : "Profile updated."
+    appliedChanges: Object.keys(directUpdates).filter(k => k !== "trustScore" && k !== "updatedAt").length,
+    message: Object.keys(changes).length
+      ? "Saved. Sensitive fields are pending admin review."
+      : "Profile updated."
   });
+});
+
+/* ---- Dedicated photo upload endpoint (always immediate, no admin review) ---- */
+app.put("/api/me/photos", auth, async (req, res) => {
+  const user = await db.findOne("users", { _id: req.user.id });
+  if (!user) return res.status(404).json({ error: "Not found" });
+  const photos = Array.isArray(req.body.photos) ? req.body.photos.slice(0, 6) : [];
+  // Sanity: must be data URLs or http URLs
+  const valid = photos.filter(p => typeof p === "string" && (p.startsWith("data:image/") || p.startsWith("http")));
+  await db.update("users", { _id: req.user.id }, { photos: valid, updatedAt: new Date() });
+  const updated = await db.findOne("users", { _id: req.user.id });
+  // Recompute trust score (photo presence can affect score)
+  await db.update("users", { _id: req.user.id }, { trustScore: computeTrustScore(updated) });
+  const final = await db.findOne("users", { _id: req.user.id });
+  res.json({ user: sanitize(final), message: "Photos updated." });
 });
 
 /* ==================== SEARCH / MATCH ==================== */
@@ -443,37 +508,86 @@ app.get("/api/users", auth, async (req, res) => {
   if (!me) return res.status(404).json({ error: "User not found" });
   const allUsers = await db.find("users", {});
 
+  // Hide blocked users in either direction
+  const blocks = await db.find("blocks", {});
+  const blockedByMe = new Set(blocks.filter(b => b.blocker === (me._id || me.id)).map(b => b.blocked));
+  const blockedMe = new Set(blocks.filter(b => b.blocked === (me._id || me.id)).map(b => b.blocker));
+
   // Admin sees all users (including admins/banned)
-  // Regular users see EVERYONE except: self, banned, admin role — no gender filter by default.
-  // User can apply their own gender filter via UI.
+  // Regular users see EVERYONE except: self, banned, admin role, blocked
   let list;
   if (me.role === "admin") {
     list = allUsers.filter(u => (u._id || u.id) !== (me._id || me.id));
   } else {
-    list = allUsers.filter(u => (u._id || u.id) !== (me._id || me.id) && !u.banned && u.role !== "admin");
+    list = allUsers.filter(u => {
+      const uid = u._id || u.id;
+      if (uid === (me._id || me.id)) return false;
+      if (u.banned || u.role === "admin") return false;
+      if (blockedByMe.has(uid) || blockedMe.has(uid)) return false;
+      if (u.invisibleMode && u.plan !== "Free") return false; // hidden in browse
+      return true;
+    });
   }
 
-  const { city, country, profession, sect, verified, overseas, minAge, maxAge, q, gender } = req.query;
+  const {
+    city, country, profession, sect, verified, overseas, minAge, maxAge, q, gender,
+    religiousLevel, category, maritalStatus, hijab, smoking, qualification
+  } = req.query;
   if (gender) list = list.filter(u => u.gender === gender);
   if (city) list = list.filter(u => u.city === city);
   if (country) list = list.filter(u => u.country === country);
-  if (profession) list = list.filter(u => u.profession === profession);
+  if (profession) {
+    const p = profession.toLowerCase();
+    list = list.filter(u => (u.profession || "").toLowerCase().includes(p));
+  }
   if (sect) list = list.filter(u => u.sect === sect);
   if (verified === "true") list = list.filter(u => u.verifications?.cnic);
-  if (overseas === "true") list = list.filter(u => u.overseas);
+  if (overseas === "true") list = list.filter(u => u.overseas || (u.country && u.country !== "Pakistan"));
   if (minAge) list = list.filter(u => u.age >= +minAge);
   if (maxAge) list = list.filter(u => u.age <= +maxAge);
+  if (religiousLevel) list = list.filter(u => u.religiousLevel === religiousLevel);
+  if (maritalStatus) list = list.filter(u => u.maritalStatus === maritalStatus);
+  if (hijab) list = list.filter(u => u.hijab === hijab);
+  if (smoking) list = list.filter(u => u.smoking === smoking);
+  if (qualification) {
+    const qual = qualification.toLowerCase();
+    list = list.filter(u => (u.qualification || "").toLowerCase().includes(qual));
+  }
+  // Category filter — common matrimony segments
+  if (category) {
+    const cat = String(category).toLowerCase();
+    list = list.filter(u => {
+      const prof = (u.profession || "").toLowerCase();
+      if (cat === "doctor") return /(doctor|md|mbbs|surgeon|physician)/.test(prof);
+      if (cat === "ceo" || cat === "vip") return /(ceo|founder|director|owner)/.test(prof) || (u.plan === "VIP");
+      if (cat === "business") return /(business|entrepreneur|owner)/.test(prof);
+      if (cat === "religious") return u.religiousLevel === "Practising";
+      if (cat === "divorcee") return u.maritalStatus === "Divorced";
+      if (cat === "widow") return u.maritalStatus === "Widowed";
+      return true;
+    });
+  }
   if (q) {
     const qq = q.toLowerCase();
     list = list.filter(u => ((u.name || "") + (u.city || "") + (u.profession || "")).toLowerCase().includes(qq));
   }
 
-  list = list.map(u => ({
-    ...sanitize(u),
-    email: me.role === "admin" ? u.email : undefined,
-    phone: (me.role === "admin" || me.plan !== "Free") ? u.phone : undefined,
-    score: compatibility(me, u)
-  })).sort((a, b) => (b.score || 0) - (a.score || 0));
+  list = list.map(u => {
+    const boosted = u.boostedUntil && new Date(u.boostedUntil) > new Date();
+    return {
+      ...sanitize(u),
+      email: me.role === "admin" ? u.email : undefined,
+      phone: (me.role === "admin" || me.plan !== "Free") ? u.phone : undefined,
+      score: compatibility(me, u),
+      boosted
+    };
+  });
+  // Sort: boosted profiles first, then by compatibility score
+  list.sort((a, b) => {
+    if (a.boosted && !b.boosted) return -1;
+    if (!a.boosted && b.boosted) return 1;
+    return (b.score || 0) - (a.score || 0);
+  });
 
   // Free plan limit only for regular users
   if (me.role !== "admin" && me.plan === "Free") list = list.slice(0, 20);
@@ -491,11 +605,481 @@ app.get("/api/matches", auth, async (req, res) => {
 });
 
 /* ==================== INTEREST / CHAT ==================== */
+// Send interest (or super like if ?super=1)
 app.post("/api/interest/:to", auth, async (req, res) => {
-  const interest = { _id: uuid(), from: req.user.id, to: req.params.to, status: "pending", createdAt: new Date() };
+  const fromId = req.user.id;
+  const toId = req.params.to;
+  if (fromId === toId) return res.status(400).json({ error: "Cannot send interest to yourself" });
+
+  // Check duplicate
+  const existing = await db.findOne("interests", { from: fromId, to: toId });
+  if (existing && existing.status !== "rejected") {
+    return res.status(400).json({ error: "Interest already sent", status: existing.status });
+  }
+
+  const isSuper = req.body?.superLike || req.query?.super === "1";
+  // Super Like quota check: 1/day free, more requires credits
+  if (isSuper) {
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const todayLikes = (await db.find("superLikes", { from: fromId })).filter(s => new Date(s.createdAt) >= today);
+    const me = await db.findOne("users", { _id: fromId });
+    const credits = me?.superLikeCredits || 0;
+    if (todayLikes.length >= 1 && credits <= 0) {
+      return res.status(402).json({ error: "Daily super like used. Buy credits to send more.", needsCredits: true });
+    }
+    if (todayLikes.length >= 1 && credits > 0) {
+      await db.update("users", { _id: fromId }, { superLikeCredits: credits - 1 });
+    }
+    await db.insert("superLikes", { _id: uuid(), from: fromId, to: toId, createdAt: new Date() });
+  }
+
+  const interest = {
+    _id: uuid(), from: fromId, to: toId, status: "pending",
+    superLike: !!isSuper, message: req.body?.message || "",
+    createdAt: new Date()
+  };
   await db.insert("interests", interest);
-  io.to(req.params.to).emit("interest", { from: req.user.id });
-  res.json({ ok: true, id: interest._id });
+  io.to(toId).emit("interest", { from: fromId, superLike: isSuper });
+  // Activity log on receiver side
+  await db.insert("activityLogs", {
+    _id: uuid(), userId: toId,
+    type: isSuper ? "super_like" : "interest",
+    icon: isSuper ? "⭐" : "💚",
+    text: isSuper ? "Someone Super Liked you!" : "Someone sent you an interest",
+    actorId: fromId, time: new Date()
+  });
+  res.json({ ok: true, id: interest._id, superLike: !!isSuper });
+});
+
+// Get my received & sent interests
+app.get("/api/interests", auth, async (req, res) => {
+  const me = req.user.id;
+  const received = await db.find("interests", { to: me });
+  const sent = await db.find("interests", { from: me });
+  // Hydrate with user info
+  const userIds = Array.from(new Set([...received.map(i => i.from), ...sent.map(i => i.to)]));
+  const users = await Promise.all(userIds.map(id => db.findOne("users", { _id: id })));
+  const userMap = Object.fromEntries(users.filter(Boolean).map(u => [u._id || u.id, sanitize(u)]));
+  res.json({
+    received: received.map(i => ({ ...i, fromUser: userMap[i.from] })),
+    sent: sent.map(i => ({ ...i, toUser: userMap[i.to] }))
+  });
+});
+
+// Accept / Reject interest
+app.post("/api/interests/:id/:action", auth, async (req, res) => {
+  const { id, action } = req.params;
+  if (!["accept", "reject"].includes(action)) return res.status(400).json({ error: "Invalid action" });
+  const interest = await db.findOne("interests", { _id: id });
+  if (!interest) return res.status(404).json({ error: "Not found" });
+  if (interest.to !== req.user.id) return res.status(403).json({ error: "Not your interest to respond" });
+  const newStatus = action === "accept" ? "accepted" : "rejected";
+  await db.update("interests", { _id: id }, { status: newStatus, respondedAt: new Date() });
+  io.to(interest.from).emit("interest_response", { id, status: newStatus });
+  // Activity log on sender side
+  await db.insert("activityLogs", {
+    _id: uuid(), userId: interest.from,
+    type: "interest_" + newStatus,
+    icon: newStatus === "accepted" ? "💚" : "❌",
+    text: newStatus === "accepted" ? "Your interest was accepted! You're now connected." : "Your interest was declined.",
+    actorId: req.user.id, time: new Date()
+  });
+  res.json({ ok: true, status: newStatus });
+});
+
+// Connection status helper used in profile detail to show Connected badge
+app.get("/api/connection/:other", auth, async (req, res) => {
+  const me = req.user.id, other = req.params.other;
+  const sent = await db.findOne("interests", { from: me, to: other });
+  const recv = await db.findOne("interests", { from: other, to: me });
+  let status = "none";
+  if (sent?.status === "accepted" || recv?.status === "accepted") status = "connected";
+  else if (sent?.status === "pending") status = "sent";
+  else if (recv?.status === "pending") status = "incoming";
+  else if (sent?.status === "rejected") status = "rejected_by_them";
+  else if (recv?.status === "rejected") status = "rejected_by_me";
+  res.json({ status, sentId: sent?._id, receivedId: recv?._id });
+});
+
+/* ==================== PROFILE VIEWS (Who Viewed Me) ==================== */
+app.post("/api/view/:user", auth, async (req, res) => {
+  const me = req.user.id, target = req.params.user;
+  if (me === target) return res.json({ ok: true, self: true });
+  // Dedupe by day per viewer-target pair
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const existing = (await db.find("profileViews", { viewer: me, target }))
+    .find(v => new Date(v.createdAt) >= today);
+  if (!existing) {
+    await db.insert("profileViews", { _id: uuid(), viewer: me, target, createdAt: new Date() });
+    io.to(target).emit("profile_viewed", { viewer: me });
+  }
+  res.json({ ok: true });
+});
+
+app.get("/api/views/me", auth, async (req, res) => {
+  // Who viewed me — latest first
+  const views = (await db.find("profileViews", { target: req.user.id }))
+    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  // De-dupe by viewer, keep latest
+  const seen = new Set(); const unique = [];
+  for (const v of views) { if (!seen.has(v.viewer)) { seen.add(v.viewer); unique.push(v); } }
+  const users = await Promise.all([...seen].map(id => db.findOne("users", { _id: id })));
+  const userMap = Object.fromEntries(users.filter(Boolean).map(u => [u._id || u.id, sanitize(u)]));
+  const me = await db.findOne("users", { _id: req.user.id });
+  const blurred = me?.plan === "Free"; // Free users see blurred avatars
+  res.json({
+    count: unique.length,
+    viewers: unique.slice(0, 100).map(v => ({
+      viewer: userMap[v.viewer], viewedAt: v.createdAt, blurred
+    }))
+  });
+});
+
+app.get("/api/likes/me", auth, async (req, res) => {
+  // Who sent me interest (pending = "liked me")
+  const interests = (await db.find("interests", { to: req.user.id }))
+    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  const userIds = [...new Set(interests.map(i => i.from))];
+  const users = await Promise.all(userIds.map(id => db.findOne("users", { _id: id })));
+  const userMap = Object.fromEntries(users.filter(Boolean).map(u => [u._id || u.id, sanitize(u)]));
+  const me = await db.findOne("users", { _id: req.user.id });
+  const blurred = me?.plan === "Free";
+  res.json({
+    count: interests.length,
+    likers: interests.slice(0, 100).map(i => ({
+      user: userMap[i.from], superLike: !!i.superLike, status: i.status,
+      likedAt: i.createdAt, blurred
+    }))
+  });
+});
+
+/* ==================== PROFILE BOOST ==================== */
+app.post("/api/boost", auth, async (req, res) => {
+  const me = await db.findOne("users", { _id: req.user.id });
+  if (!me) return res.status(404).json({ error: "Not found" });
+  const credits = me.boostCredits || 0;
+  if (credits <= 0 && me.plan === "Free") {
+    return res.status(402).json({ error: "No boost credits. Upgrade to Premium or buy credits.", needsCredits: true });
+  }
+  const duration = 24 * 60 * 60 * 1000; // 24 hours
+  const expiresAt = new Date(Date.now() + duration);
+  await db.insert("boosts", { _id: uuid(), userId: req.user.id, startedAt: new Date(), expiresAt, plan: me.plan });
+  if (credits > 0) {
+    await db.update("users", { _id: req.user.id }, { boostCredits: credits - 1 });
+  }
+  await db.update("users", { _id: req.user.id }, { boostedUntil: expiresAt });
+  res.json({ ok: true, expiresAt });
+});
+
+// Daily matches — picks freshest active matches once per day, cached client-side
+app.get("/api/daily-matches", auth, async (req, res) => {
+  const me = await db.findOne("users", { _id: req.user.id });
+  if (!me) return res.status(404).json({ error: "Not found" });
+  const all = await db.find("users", {});
+  const myId = me._id || me.id;
+  // Exclude self, banned, admin, already-interested
+  const myInterests = await db.find("interests", { from: myId });
+  const sentSet = new Set(myInterests.map(i => i.to));
+  const list = all
+    .filter(u => (u._id || u.id) !== myId && !u.banned && u.role !== "admin" && !sentSet.has(u._id || u.id))
+    .map(u => ({ ...sanitize(u), email: undefined, phone: undefined, score: compatibility(me, u) }))
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 5);
+  res.json({ matches: list, generatedAt: new Date() });
+});
+
+/* ==================== AI DREAM PARTNER GENERATOR ==================== */
+// Parses natural-language wishes ("tall doctor religious overseas under 30")
+// and scores users by attribute overlap. No external LLM required.
+app.post("/api/dream-partner", auth, async (req, res) => {
+  const me = await db.findOne("users", { _id: req.user.id });
+  const text = String(req.body?.text || "").toLowerCase().trim();
+  if (!text) return res.status(400).json({ error: "Describe your dream partner in a few words" });
+
+  // Heuristic keyword extraction
+  const wants = {
+    profession: [],
+    religiousLevel: null,
+    sect: null,
+    overseas: null,
+    maxAge: null,
+    minAge: null,
+    city: null,
+    country: null,
+    heightTall: false,
+    hijab: null,
+    smoking: null,
+    qualification: null,
+  };
+  const PROFESSIONS = ["doctor", "engineer", "teacher", "lawyer", "businessman", "businesswoman", "ceo", "manager", "designer", "developer", "nurse", "pilot", "accountant"];
+  PROFESSIONS.forEach(p => { if (text.includes(p)) wants.profession.push(p); });
+  if (/\bsunni\b/.test(text)) wants.sect = "Sunni";
+  if (/\bshia\b/.test(text)) wants.sect = "Shia";
+  if (/(religious|practising|hafiz|alim|maulvi)/.test(text)) wants.religiousLevel = "Practising";
+  if (/(moderate|liberal)/.test(text)) wants.religiousLevel = "Moderate";
+  if (/(overseas|abroad|foreign|usa|uk|canada|dubai|saudi|germany|australia)/.test(text)) wants.overseas = true;
+  const ageMax = text.match(/under (\d{2})/) || text.match(/below (\d{2})/) || text.match(/max (\d{2})/);
+  if (ageMax) wants.maxAge = +ageMax[1];
+  const ageMin = text.match(/above (\d{2})/) || text.match(/over (\d{2})/) || text.match(/min (\d{2})/);
+  if (ageMin) wants.minAge = +ageMin[1];
+  if (/(tall|6 feet|6ft)/.test(text)) wants.heightTall = true;
+  if (/hijab/.test(text)) wants.hijab = "Yes";
+  if (/non.?smoker|no smoke/.test(text)) wants.smoking = "No";
+  if (/(masters|mba|phd|doctorate|bachelor)/.test(text)) wants.qualification = text.match(/(masters|mba|phd|doctorate|bachelor)/)[1];
+
+  // Pakistani city hints
+  ["karachi", "lahore", "islamabad", "rawalpindi", "peshawar", "multan", "faisalabad", "quetta"].forEach(c => {
+    if (text.includes(c)) wants.city = c[0].toUpperCase() + c.slice(1);
+  });
+  // Countries
+  ["pakistan", "usa", "uk", "canada", "dubai", "uae", "saudi arabia", "australia", "germany"].forEach(c => {
+    if (text.includes(c)) wants.country = c.split(" ").map(w => w[0].toUpperCase() + w.slice(1)).join(" ");
+  });
+
+  const all = await db.find("users", {});
+  const myId = me?._id || me?.id;
+  // Opposite-gender, not banned, not self
+  const wantGender = me?.gender === "Male" ? "Female" : me?.gender === "Female" ? "Male" : null;
+  let candidates = all.filter(u =>
+    (u._id || u.id) !== myId && !u.banned && u.role !== "admin"
+    && (!wantGender || u.gender === wantGender)
+  );
+
+  // Score each candidate
+  const scored = candidates.map(u => {
+    let score = 0;
+    const reasons = [];
+    if (wants.profession.length && u.profession) {
+      const p = String(u.profession).toLowerCase();
+      const hit = wants.profession.find(x => p.includes(x));
+      if (hit) { score += 25; reasons.push("Profession: " + u.profession); }
+    }
+    if (wants.sect && u.sect === wants.sect) { score += 15; reasons.push("Sect: " + u.sect); }
+    if (wants.religiousLevel && u.religiousLevel === wants.religiousLevel) { score += 15; reasons.push("Religious: " + u.religiousLevel); }
+    if (wants.overseas === true && (u.overseas || (u.country && u.country !== "Pakistan"))) { score += 18; reasons.push("Overseas: " + (u.country || "yes")); }
+    if (wants.maxAge && u.age && u.age <= wants.maxAge) { score += 10; reasons.push("Age ≤ " + wants.maxAge); }
+    if (wants.minAge && u.age && u.age >= wants.minAge) { score += 10; reasons.push("Age ≥ " + wants.minAge); }
+    if (wants.city && u.city === wants.city) { score += 12; reasons.push("City: " + u.city); }
+    if (wants.country && u.country === wants.country) { score += 12; reasons.push("Country: " + u.country); }
+    if (wants.heightTall && u.height && /[6-7]/.test(u.height)) { score += 8; reasons.push("Tall"); }
+    if (wants.hijab && u.hijab === wants.hijab) { score += 8; reasons.push("Hijab: " + u.hijab); }
+    if (wants.smoking && u.smoking === wants.smoking) { score += 5; reasons.push("Smoking: " + u.smoking); }
+    if (wants.qualification && u.qualification && u.qualification.toLowerCase().includes(wants.qualification)) {
+      score += 10; reasons.push("Qualification");
+    }
+    // Add base compatibility score
+    if (me) score += Math.floor(compatibility(me, u) / 5);
+    return { ...sanitize(u), email: undefined, phone: undefined, dreamScore: score, dreamReasons: reasons };
+  });
+
+  scored.sort((a, b) => b.dreamScore - a.dreamScore);
+  res.json({
+    parsed: wants,
+    matches: scored.slice(0, 10),
+    total: scored.filter(s => s.dreamScore > 30).length
+  });
+});
+
+/* ==================== STORIES (24hr expiry) ==================== */
+app.post("/api/stories", auth, async (req, res) => {
+  const { media, caption, type } = req.body || {};
+  if (!media || typeof media !== "string") return res.status(400).json({ error: "Media required" });
+  const story = {
+    _id: uuid(), userId: req.user.id, media, caption: caption || "",
+    type: type || "image",
+    createdAt: new Date(),
+    expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+    viewers: []
+  };
+  await db.insert("stories", story);
+  res.json({ ok: true, story });
+});
+
+app.get("/api/stories", auth, async (req, res) => {
+  const all = await db.find("stories", {});
+  const fresh = all.filter(s => new Date(s.expiresAt) > new Date());
+  // Hydrate with author
+  const userIds = [...new Set(fresh.map(s => s.userId))];
+  const users = await Promise.all(userIds.map(id => db.findOne("users", { _id: id })));
+  const userMap = Object.fromEntries(users.filter(Boolean).map(u => [u._id || u.id, sanitize(u)]));
+  // Group by author
+  const grouped = userIds.map(uid => ({
+    user: userMap[uid],
+    stories: fresh.filter(s => s.userId === uid).sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt))
+  })).filter(g => g.user);
+  res.json(grouped);
+});
+
+app.post("/api/stories/:id/view", auth, async (req, res) => {
+  const s = await db.findOne("stories", { _id: req.params.id });
+  if (!s) return res.json({ ok: false });
+  const viewers = Array.isArray(s.viewers) ? s.viewers : [];
+  if (!viewers.includes(req.user.id)) {
+    viewers.push(req.user.id);
+    await db.update("stories", { _id: req.params.id }, { viewers });
+  }
+  res.json({ ok: true });
+});
+
+app.delete("/api/stories/:id", auth, async (req, res) => {
+  const s = await db.findOne("stories", { _id: req.params.id });
+  if (!s) return res.status(404).json({ error: "Not found" });
+  if (s.userId !== req.user.id && req.user.role !== "admin") return res.status(403).json({ error: "Not yours" });
+  await db.remove("stories", { _id: req.params.id });
+  res.json({ ok: true });
+});
+
+/* ==================== SUCCESS STORIES (couple stories) ==================== */
+app.get("/api/success-stories", async (req, res) => {
+  const list = (await db.find("successStories", {}))
+    .filter(s => s.published !== false)
+    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  res.json(list);
+});
+
+app.post("/api/admin/success-stories", auth, adminOnly, async (req, res) => {
+  const { title, story, coupleNames, photo, weddingDate, location } = req.body || {};
+  const doc = { _id: uuid(), title, story, coupleNames, photo, weddingDate, location, published: true, createdAt: new Date() };
+  await db.insert("successStories", doc);
+  res.json(doc);
+});
+
+app.put("/api/admin/success-stories/:id", auth, adminOnly, async (req, res) => {
+  await db.update("successStories", { _id: req.params.id }, req.body);
+  res.json({ ok: true });
+});
+
+app.delete("/api/admin/success-stories/:id", auth, adminOnly, async (req, res) => {
+  await db.remove("successStories", { _id: req.params.id });
+  res.json({ ok: true });
+});
+
+/* ==================== BLOCK / PRIVACY ==================== */
+app.post("/api/block/:user", auth, async (req, res) => {
+  if (req.params.user === req.user.id) return res.status(400).json({ error: "Cannot block yourself" });
+  const existing = await db.findOne("blocks", { blocker: req.user.id, blocked: req.params.user });
+  if (existing) return res.json({ ok: true, already: true });
+  await db.insert("blocks", { _id: uuid(), blocker: req.user.id, blocked: req.params.user, createdAt: new Date() });
+  res.json({ ok: true });
+});
+
+app.delete("/api/block/:user", auth, async (req, res) => {
+  await db.remove("blocks", { blocker: req.user.id, blocked: req.params.user });
+  res.json({ ok: true });
+});
+
+app.get("/api/blocks", auth, async (req, res) => {
+  const blocks = await db.find("blocks", { blocker: req.user.id });
+  const ids = blocks.map(b => b.blocked);
+  const users = await Promise.all(ids.map(id => db.findOne("users", { _id: id })));
+  res.json(users.filter(Boolean).map(sanitize));
+});
+
+// Privacy settings: PIN lock, invisible mode, blur photos
+app.put("/api/me/privacy", auth, async (req, res) => {
+  const allowed = ["pinLock", "pinCode", "invisibleMode", "blurPhoto", "hideOnline", "hideLastSeen", "disappearingMessages"];
+  const patch = {};
+  allowed.forEach(k => { if (req.body[k] !== undefined) patch[k] = req.body[k]; });
+  await db.update("users", { _id: req.user.id }, patch);
+  const u = await db.findOne("users", { _id: req.user.id });
+  res.json({ user: sanitize(u) });
+});
+
+/* ==================== PRESENCE / ONLINE STATUS ==================== */
+app.post("/api/presence/ping", auth, async (req, res) => {
+  await db.update("users", { _id: req.user.id }, { lastActive: new Date() });
+  res.json({ ok: true });
+});
+
+app.get("/api/presence/:user", auth, async (req, res) => {
+  const u = await db.findOne("users", { _id: req.params.user });
+  if (!u) return res.json({ online: false });
+  if (u.hideOnline || u.hideLastSeen) return res.json({ online: false, hidden: true });
+  const lastActive = u.lastActive ? new Date(u.lastActive) : null;
+  const online = lastActive && (Date.now() - lastActive.getTime() < 2 * 60 * 1000); // 2 min window
+  res.json({ online, lastActive });
+});
+
+/* ==================== MESSAGE READ RECEIPTS / TYPING ==================== */
+app.post("/api/messages/:other/read", auth, async (req, res) => {
+  const key = [req.user.id, req.params.other].sort().join("-");
+  await db.update("messageReads", { user: req.user.id, partner: req.params.other }, {
+    user: req.user.id, partner: req.params.other, readAt: new Date(), threadKey: key
+  });
+  // Upsert: if no row, insert it
+  const existing = await db.findOne("messageReads", { user: req.user.id, partner: req.params.other });
+  if (!existing) {
+    await db.insert("messageReads", {
+      _id: uuid(), user: req.user.id, partner: req.params.other,
+      readAt: new Date(), threadKey: key
+    });
+  }
+  io.to(req.params.other).emit("message_read", { reader: req.user.id, time: new Date() });
+  res.json({ ok: true });
+});
+
+app.get("/api/messages/:other/read-status", auth, async (req, res) => {
+  // When did the OTHER person last read messages from me?
+  const r = await db.findOne("messageReads", { user: req.params.other, partner: req.user.id });
+  res.json({ readAt: r?.readAt || null });
+});
+
+/* ==================== CREDITS / MONETIZATION ==================== */
+app.get("/api/credits", auth, async (req, res) => {
+  const u = await db.findOne("users", { _id: req.user.id });
+  res.json({
+    superLikeCredits: u?.superLikeCredits || 0,
+    boostCredits: u?.boostCredits || 0,
+    revealCredits: u?.revealCredits || 0,
+  });
+});
+
+// Buy credits — admin verifies payment, this is the post-verify action
+app.post("/api/admin/users/:id/credits", auth, adminOnly, async (req, res) => {
+  const u = await db.findOne("users", { _id: req.params.id });
+  if (!u) return res.status(404).json({ error: "Not found" });
+  const patch = {};
+  ["superLikeCredits", "boostCredits", "revealCredits"].forEach(k => {
+    if (typeof req.body[k] === "number") {
+      patch[k] = (u[k] || 0) + req.body[k];
+    }
+  });
+  await db.update("users", { _id: req.params.id }, patch);
+  res.json({ ok: true, patch });
+});
+
+/* ==================== FRAUD REPORTS (Admin) ==================== */
+app.get("/api/admin/fraud-flags", auth, adminOnly, async (req, res) => {
+  const flags = (await db.find("fraudFlags", {})).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  const userIds = [...new Set(flags.map(f => f.userId))];
+  const users = await Promise.all(userIds.map(id => db.findOne("users", { _id: id })));
+  const userMap = Object.fromEntries(users.filter(Boolean).map(u => [u._id || u.id, sanitize(u)]));
+  res.json(flags.map(f => ({ ...f, user: userMap[f.userId] })));
+});
+
+app.post("/api/admin/fraud-flags/:id/resolve", auth, adminOnly, async (req, res) => {
+  await db.update("fraudFlags", { _id: req.params.id }, { resolved: true, resolvedAt: new Date(), resolvedBy: req.user.id });
+  res.json({ ok: true });
+});
+
+/* ==================== ADMIN: BOOSTS, ACTIVE STORIES ==================== */
+app.get("/api/admin/boosts", auth, adminOnly, async (req, res) => {
+  const all = await db.find("boosts", {});
+  const active = all.filter(b => new Date(b.expiresAt) > new Date());
+  const ids = active.map(b => b.userId);
+  const users = await Promise.all(ids.map(id => db.findOne("users", { _id: id })));
+  const userMap = Object.fromEntries(users.filter(Boolean).map(u => [u._id || u.id, sanitize(u)]));
+  res.json(active.map(b => ({ ...b, user: userMap[b.userId] })));
+});
+
+app.get("/api/admin/stories", auth, adminOnly, async (req, res) => {
+  const stories = (await db.find("stories", {}))
+    .filter(s => new Date(s.expiresAt) > new Date())
+    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  const ids = [...new Set(stories.map(s => s.userId))];
+  const users = await Promise.all(ids.map(id => db.findOne("users", { _id: id })));
+  const userMap = Object.fromEntries(users.filter(Boolean).map(u => [u._id || u.id, sanitize(u)]));
+  res.json(stories.map(s => ({ ...s, user: userMap[s.userId] })));
 });
 
 app.get("/api/messages/:other", auth, async (req, res) => {
