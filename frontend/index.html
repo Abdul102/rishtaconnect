@@ -1884,12 +1884,46 @@ function Matches({user, users, onOpen}){
 
 /* ---------------- Profile Detail ---------------- */
 function ProfileDetail({u, user, onClose, onChat, onInterest}){
+  const [connection, setConnection] = useState({status:"none"});
+  const [presence, setPresence] = useState({online:false});
+  useEffect(()=>{
+    const uid = u._id || u.id;
+    // Track view
+    api("/api/view/"+uid, {method:"POST", body:{}}).catch(()=>{});
+    api("/api/connection/"+uid).then(r=>r&&setConnection(r)).catch(()=>{});
+    api("/api/presence/"+uid).then(r=>r&&setPresence(r)).catch(()=>{});
+  }, [u._id || u.id]);
+  const superLike = async () => {
+    try {
+      await api("/api/interest/"+(u._id||u.id), {method:"POST", body:{superLike:true}});
+      setConnection({status:"sent"});
+      alert("⭐ Super Like sent! They'll see your interest first.");
+    } catch(e) {
+      if (e?.body?.needsCredits) alert("Daily super like used. Upgrade to Premium for unlimited.");
+      else alert("Failed: " + (e.message||""));
+    }
+  };
+  const blockUser = async () => {
+    if (!confirm("Block this user? You won't see each other anymore.")) return;
+    try { await api("/api/block/"+(u._id||u.id), {method:"POST", body:{}}); alert("Blocked."); onClose(); }
+    catch(e) { alert("Failed"); }
+  };
+  const cBadge = connection.status === "connected" ? {l:"✓ Connected", c:"bg-green-500"}
+              : connection.status === "sent" ? {l:"⏳ Interest sent", c:"bg-amber-500"}
+              : connection.status === "incoming" ? {l:"💚 They sent you interest", c:"bg-emerald-brand"}
+              : null;
   return (
     <div className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm flex items-end md:items-center justify-center">
       <div className="bg-white w-full md:max-w-3xl md:rounded-3xl rounded-t-3xl max-h-[92vh] overflow-y-auto fade-in">
         <div className="sticky top-0 bg-white border-b px-5 py-3 flex items-center justify-between">
-          <div className="font-semibold">{u.name} <span className="font-urdu text-gray-500 text-sm">{u.nameUr}</span></div>
-          <button onClick={onClose} className="text-gray-500">✕</button>
+          <div className="font-semibold">{u.name}
+            {presence.online && <span className="ml-2 chip bg-green-100 text-green-700 text-xs">🟢 Online</span>}
+            {cBadge && <span className={"ml-2 chip text-white "+cBadge.c}>{cBadge.l}</span>}
+          </div>
+          <div className="flex items-center gap-3">
+            <button onClick={blockUser} className="text-red-600 text-sm font-bold">🚫 Block</button>
+            <button onClick={onClose} className="text-gray-500">✕</button>
+          </div>
         </div>
         <div className="p-5">
           <div className="flex items-start gap-4">
@@ -1987,11 +2021,21 @@ function ProfileDetail({u, user, onClose, onChat, onInterest}){
           })()}
 
           <div className="mt-5 flex flex-col md:flex-row gap-3">
-            <button onClick={onInterest} className="btn-primary flex-1 py-3 rounded-xl font-semibold">💚 Send Interest</button>
-            <button onClick={onChat} className="btn-gold flex-1 py-3 rounded-xl font-semibold">💬 Message</button>
+            <button
+              onClick={onInterest}
+              disabled={connection.status==="sent" || connection.status==="connected"}
+              className="btn-primary flex-1 py-3 rounded-xl font-semibold disabled:opacity-50"
+            >
+              {connection.status==="connected" ? "✓ Connected" : connection.status==="sent" ? "⏳ Sent" : "💚 Send Interest"}
+            </button>
+            <button
+              onClick={superLike}
+              disabled={connection.status==="connected"}
+              className="btn-gold flex-1 py-3 rounded-xl font-semibold disabled:opacity-50"
+            >⭐ Super Like</button>
+            <button onClick={onChat} className="bg-emerald-brand text-white flex-1 py-3 rounded-xl font-semibold">💬 Message</button>
             <a href={"https://wa.me/"+(u.phone||"").replace(/[^0-9]/g,"")} target="_blank" className="px-4 py-3 rounded-xl bg-green-500 text-white font-semibold text-center">WhatsApp</a>
             <button className="px-4 py-3 rounded-xl border font-semibold">📅 Meeting</button>
-            <button className="px-4 py-3 rounded-xl border text-red-600 font-semibold">⚠ Report</button>
           </div>
         </div>
       </div>
@@ -2570,7 +2614,13 @@ function MyProfile({user, setUser, onLogout, onEdit, onNav}){
         </div>
         <div className="p-5 grid md:grid-cols-3 gap-3">
           <ActionTile icon="✏️" t={pendingEdit?"Edit Locked":"Edit Biodata"} onClick={()=> pendingEdit ? alert("Your previous edit is still pending admin review. Please wait for approval before making new changes.") : onEdit()}/>
+          <ActionTile icon="🪄" t="AI Dream Partner" onClick={()=>onNav("dreamPartner")}/>
+          <ActionTile icon="⭐" t="My Interests" onClick={()=>onNav("interests")}/>
+          <ActionTile icon="👀" t="Who Viewed Me" onClick={()=>onNav("analytics")}/>
+          <ActionTile icon="📸" t="Stories" onClick={()=>onNav("stories")}/>
+          <ActionTile icon="💞" t="Success Stories" onClick={()=>onNav("successStories")}/>
           <ActionTile icon="🛡️" t="Verification" onClick={()=>onNav("verify")}/>
+          <ActionTile icon="🔒" t="Privacy & Block" onClick={()=>onNav("privacy")}/>
           <ActionTile icon="💳" t="Subscription" onClick={()=>onNav("subscription")}/>
           <ActionTile icon="👨‍👩‍👧" t="Family Dashboard" onClick={()=>onNav("family")}/>
           <ActionTile icon="💎" t="Hire Matchmaker" onClick={()=>onNav("matchmakers")}/>
@@ -2593,6 +2643,436 @@ function ActionTile({icon, t, onClick}){
       <div className="text-2xl">{icon}</div>
       <div className="font-semibold mt-1">{t}</div>
     </button>
+  );
+}
+
+/* ====================================================================
+   ADVANCED FEATURES (added in v2):
+   AI Dream Partner, Interests, Analytics, Stories, Success Stories, Privacy
+   ==================================================================== */
+
+function InterestsView({user, onOpen}) {
+  const [data, setData] = useState({received: [], sent: []});
+  const [tab, setTab] = useState("received");
+  const [busy, setBusy] = useState("");
+  const load = async () => {
+    try { const r = await api("/api/interests"); setData(r || {received:[], sent:[]}); } catch(e){}
+  };
+  useEffect(()=>{ load(); }, []);
+  const respond = async (id, action) => {
+    setBusy(id);
+    try { await api(`/api/interests/${id}/${action}`, {method:"POST", body:{}}); await load(); }
+    catch(e) { alert("Failed: " + e.message); }
+    finally { setBusy(""); }
+  };
+  const list = tab === "received" ? data.received : data.sent;
+  const counts = {
+    received: (data.received||[]).filter(i=>i.status==="pending").length,
+    sent: (data.sent||[]).filter(i=>i.status==="pending").length,
+    connected: [...(data.received||[]), ...(data.sent||[])].filter(i=>i.status==="accepted").length
+  };
+  const statusBadge = s => s==="accepted" ? <span className="chip bg-green-100 text-green-700">✓ Connected</span> :
+                            s==="rejected" ? <span className="chip bg-red-100 text-red-700">✗ Declined</span> :
+                            <span className="chip bg-amber-100 text-amber-700">⏳ Pending</span>;
+  return (
+    <div className="max-w-3xl mx-auto p-5 pb-24">
+      <h2 className="font-display text-2xl">⭐ Interests</h2>
+      <div className="mt-3 grid grid-cols-3 gap-2">
+        <StatBoxWeb label="Received" value={counts.received} color="emerald"/>
+        <StatBoxWeb label="Sent" value={counts.sent} color="amber"/>
+        <StatBoxWeb label="Connected" value={counts.connected} color="green"/>
+      </div>
+      <div className="mt-4 flex gap-2">
+        {["received","sent"].map(t => (
+          <button key={t} onClick={()=>setTab(t)} className={"px-4 py-2 rounded-full font-semibold "+(tab===t?"bg-emerald-brand text-white":"bg-white border")}>{t==="received"?"Received":"Sent"}</button>
+        ))}
+      </div>
+      <div className="mt-4 space-y-2">
+        {list.length===0 && <div className="bg-white rounded-2xl p-8 text-center text-gray-500">No {tab} interests yet.</div>}
+        {list.map(i => {
+          const other = tab==="received" ? i.fromUser : i.toUser;
+          if (!other) return null;
+          return (
+            <div key={i._id} className="bg-white rounded-2xl p-4 flex items-center gap-3 shadow-card">
+              <div className="cursor-pointer" onClick={()=>onOpen(other)}>
+                <Avatar kind={other.gender==="Female"?"female":"male"} size={56} photo={other.photos?.[0]}/>
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="font-semibold">{other.name} {i.superLike && <span title="Super Like">⭐</span>}</div>
+                <div className="text-xs text-gray-500">{[other.age && other.age+"yr", other.city, other.profession].filter(Boolean).join(" • ")}</div>
+                <div className="mt-1">{statusBadge(i.status)}</div>
+              </div>
+              {tab==="received" && i.status==="pending" && (
+                <div className="flex gap-2">
+                  <button disabled={busy===i._id} onClick={()=>respond(i._id, "accept")} className="px-3 py-2 rounded-lg bg-green-600 text-white text-xs font-bold">✓ Accept</button>
+                  <button disabled={busy===i._id} onClick={()=>respond(i._id, "reject")} className="px-3 py-2 rounded-lg bg-red-600 text-white text-xs font-bold">✗ Decline</button>
+                </div>
+              )}
+              {i.status === "accepted" && (
+                <button onClick={()=>onOpen(other)} className="px-3 py-2 rounded-lg bg-emerald-brand text-white text-xs font-bold">💬 Chat</button>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function StatBoxWeb({label, value, color}) {
+  const map = {emerald:"bg-emerald-50 text-emerald-700 border-emerald-200", amber:"bg-amber-50 text-amber-700 border-amber-200", green:"bg-green-50 text-green-700 border-green-200"};
+  return (
+    <div className={"rounded-2xl p-4 border "+(map[color]||"")}>
+      <div className="text-3xl font-bold">{value}</div>
+      <div className="text-xs font-semibold uppercase">{label}</div>
+    </div>
+  );
+}
+
+function AnalyticsView({user, onOpen}) {
+  const [tab, setTab] = useState("views");
+  const [views, setViews] = useState({count:0, viewers:[]});
+  const [likes, setLikes] = useState({count:0, likers:[]});
+  useEffect(()=>{
+    Promise.all([api("/api/views/me").catch(()=>null), api("/api/likes/me").catch(()=>null)]).then(([v,l])=>{
+      if (v) setViews(v); if (l) setLikes(l);
+    });
+  }, []);
+  const isFree = (user.plan || "Free") === "Free";
+  const items = tab==="views" ? views.viewers : likes.likers;
+  return (
+    <div className="max-w-3xl mx-auto p-5 pb-24">
+      <h2 className="font-display text-2xl">📈 Profile Insights</h2>
+      <div className="mt-3 grid grid-cols-2 gap-3">
+        <div className="rounded-2xl p-5 gradient-hero text-white">
+          <div className="text-3xl font-bold">{views.count}</div>
+          <div className="text-sm">👀 Profile Views</div>
+        </div>
+        <div className="rounded-2xl p-5 bg-amber-500 text-white">
+          <div className="text-3xl font-bold">{likes.count}</div>
+          <div className="text-sm">💖 Liked Me</div>
+        </div>
+      </div>
+      <div className="mt-4 flex gap-2">
+        <button onClick={()=>setTab("views")} className={"px-4 py-2 rounded-full font-semibold "+(tab==="views"?"bg-emerald-brand text-white":"bg-white border")}>👀 Who Viewed</button>
+        <button onClick={()=>setTab("likes")} className={"px-4 py-2 rounded-full font-semibold "+(tab==="likes"?"bg-emerald-brand text-white":"bg-white border")}>💖 Who Liked</button>
+      </div>
+      {isFree && (items.length > 0) && (
+        <div className="mt-3 bg-amber-50 border-2 border-amber-300 rounded-2xl p-4 flex items-center gap-3">
+          <div className="text-3xl">🔓</div>
+          <div className="flex-1">
+            <div className="font-bold">Unlock with Premium</div>
+            <div className="text-xs text-gray-600">Free plan: avatars are blurred until you upgrade.</div>
+          </div>
+        </div>
+      )}
+      <div className="mt-4 space-y-2">
+        {items.length === 0 && <div className="bg-white rounded-2xl p-8 text-center text-gray-500">No {tab} yet.</div>}
+        {items.map((it, idx) => {
+          const other = tab==="views" ? it.viewer : it.user;
+          if (!other) return null;
+          const blurred = it.blurred && isFree;
+          return (
+            <div key={idx} onClick={()=> blurred ? alert("Upgrade to Premium to see who's interested in you.") : onOpen(other)}
+                 className="bg-white rounded-2xl p-3 flex items-center gap-3 shadow-card cursor-pointer hover:bg-cream">
+              <div className={blurred ? "blur-md opacity-50" : ""}>
+                <Avatar kind={other.gender==="Female"?"female":"male"} size={48} photo={blurred ? null : other.photos?.[0]}/>
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="font-semibold">{blurred ? "🔒 Hidden until Premium" : other.name} {it.superLike && <span>⭐</span>}</div>
+                <div className="text-xs text-gray-500">{blurred ? "Tap to unlock" : [other.age && other.age+"yr", other.city].filter(Boolean).join(" • ")}</div>
+              </div>
+              <div className="text-xs text-gray-400">{timeAgoSimple(it.viewedAt || it.likedAt)}</div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function timeAgoSimple(d){
+  if (!d) return "";
+  const s = Math.floor((Date.now() - new Date(d))/1000);
+  if (s<60) return "now";
+  if (s<3600) return Math.floor(s/60)+"m";
+  if (s<86400) return Math.floor(s/3600)+"h";
+  return Math.floor(s/86400)+"d";
+}
+
+function DreamPartnerView({user, onOpen}) {
+  const [text, setText] = useState("");
+  const [result, setResult] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const SAMPLES = [
+    "Tall doctor, religious, sunni, under 30",
+    "Engineer, overseas, masters degree, moderate religious",
+    "Businesswoman, Lahore, practising, hijab",
+    "CEO from Karachi, age 28-35, non smoker"
+  ];
+  const search = async (q) => {
+    const query = q || text;
+    if (!query.trim()) return;
+    setText(query); setLoading(true); setResult(null);
+    try { const r = await api("/api/dream-partner", {method:"POST", body:{text:query}}); setResult(r); }
+    catch(e) { setResult({error: e.message}); }
+    finally { setLoading(false); }
+  };
+  return (
+    <div className="max-w-3xl mx-auto p-5 pb-24">
+      <div className="rounded-3xl gradient-hero text-white p-6 text-center">
+        <div className="text-5xl">🪄</div>
+        <div className="font-display text-2xl mt-2">Dream Partner Generator</div>
+        <div className="text-white/85 text-sm mt-1">Describe in plain English / Roman Urdu — AI finds top 10 matches.</div>
+      </div>
+      <textarea
+        value={text}
+        onChange={e=>setText(e.target.value)}
+        placeholder="e.g. Tall doctor, religious, sunni, under 30, overseas..."
+        className="inp w-full mt-4 min-h-[100px]"
+      />
+      <button onClick={()=>search()} disabled={loading || !text.trim()} className="btn-primary w-full mt-2">
+        {loading ? "Finding matches..." : "✨ Find My Dream Matches"}
+      </button>
+      <div className="mt-4">
+        <div className="text-xs text-gray-500 mb-2">TRY THESE:</div>
+        <div className="flex flex-wrap gap-2">
+          {SAMPLES.map(p => <button key={p} onClick={()=>search(p)} className="chip border hover:bg-cream">{p}</button>)}
+        </div>
+      </div>
+      {result?.error && <div className="mt-4 text-red-600">{result.error}</div>}
+      {result?.matches && (
+        <div className="mt-6">
+          <div className="flex justify-between items-center mb-2">
+            <div className="font-bold">{result.matches.length} matches found</div>
+            <div className="text-xs text-gray-500">{result.total} total match your criteria</div>
+          </div>
+          {result.parsed && (
+            <div className="flex flex-wrap gap-1 mb-3">
+              {Object.entries(result.parsed).map(([k,v]) => {
+                if (v == null || v === false || (Array.isArray(v) && v.length === 0)) return null;
+                return <span key={k} className="chip bg-emerald-50 text-emerald-700">{k}: {Array.isArray(v) ? v.join(",") : String(v)}</span>;
+              })}
+            </div>
+          )}
+          <div className="space-y-2">
+            {result.matches.map(m => (
+              <div key={m._id||m.id} onClick={()=>onOpen(m)} className="bg-white rounded-2xl p-3 flex items-center gap-3 shadow-card cursor-pointer hover:bg-cream">
+                <Avatar kind={m.gender==="Female"?"female":"male"} size={56} photo={m.photos?.[0]}/>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <div className="font-bold">{m.name}</div>
+                    <span className="chip bg-emerald-brand text-white text-xs">{m.dreamScore}% match</span>
+                  </div>
+                  <div className="text-xs text-gray-500">{[m.age && m.age+"yr", m.city, m.profession].filter(Boolean).join(" • ")}</div>
+                  {m.dreamReasons?.length > 0 && <div className="text-xs text-emerald-700 mt-1">✓ {m.dreamReasons.slice(0,3).join(" • ")}</div>}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function StoriesView({user}) {
+  const [groups, setGroups] = useState([]);
+  const [active, setActive] = useState(null);
+  const [creating, setCreating] = useState(false);
+  const [caption, setCaption] = useState("");
+  const [media, setMedia] = useState(null);
+  const fileRef = useRef();
+  const load = ()=> api("/api/stories").then(r=>Array.isArray(r)?setGroups(r):null).catch(()=>{});
+  useEffect(()=>{ load(); }, []);
+  const handleFile = (e)=>{
+    const f = e.target.files?.[0]; if (!f) return;
+    const reader = new FileReader();
+    reader.onload = ()=> setMedia(reader.result);
+    reader.readAsDataURL(f);
+  };
+  const post = async () => {
+    if (!media) return alert("Pick image first");
+    try { await api("/api/stories", {method:"POST", body:{media, caption, type:"image"}}); setCreating(false); setMedia(null); setCaption(""); await load(); alert("Posted!"); }
+    catch(e) { alert("Failed: " + e.message); }
+  };
+  return (
+    <div className="max-w-3xl mx-auto p-5 pb-24">
+      <div className="flex justify-between items-center">
+        <h2 className="font-display text-2xl">📸 Stories</h2>
+        <button onClick={()=>setCreating(true)} className="btn-primary">+ New Story</button>
+      </div>
+      <div className="text-sm text-gray-500 mt-1">Stories disappear after 24 hours.</div>
+      <div className="mt-4 grid grid-cols-3 md:grid-cols-5 gap-3">
+        {groups.length === 0 && <div className="col-span-full bg-white rounded-2xl p-8 text-center text-gray-500">No stories yet — be the first to post!</div>}
+        {groups.map(g => (
+          <button key={g.user._id || g.user.id} onClick={()=>setActive({...g, idx:0})} className="text-center group">
+            <div className="rounded-full p-1 border-4 border-emerald-brand inline-block">
+              <Avatar kind={g.user.gender==="Female"?"female":"male"} size={70} photo={g.user.photos?.[0]}/>
+            </div>
+            <div className="text-xs font-semibold mt-1 truncate">{g.user.name}</div>
+          </button>
+        ))}
+      </div>
+
+      {/* Viewer */}
+      {active && (
+        <div className="fixed inset-0 z-50 bg-black flex items-center justify-center" onClick={()=>{
+          if (active.idx < active.stories.length - 1) {
+            setActive({...active, idx: active.idx + 1});
+            api("/api/stories/"+active.stories[active.idx+1]._id+"/view", {method:"POST",body:{}}).catch(()=>{});
+          } else setActive(null);
+        }}>
+          <div className="absolute top-4 left-4 right-4 z-10">
+            <div className="flex gap-1 mb-2">
+              {active.stories.map((_,i)=>(
+                <div key={i} className="flex-1 h-1 rounded" style={{background: i<=active.idx ? "#fff" : "rgba(255,255,255,0.3)"}}/>
+              ))}
+            </div>
+            <div className="flex items-center gap-2 text-white">
+              <Avatar kind={active.user.gender==="Female"?"female":"male"} size={32} photo={active.user.photos?.[0]}/>
+              <div className="font-bold flex-1">{active.user.name}</div>
+              <button onClick={(e)=>{e.stopPropagation(); setActive(null);}} className="text-2xl">✕</button>
+            </div>
+          </div>
+          {active.stories[active.idx]?.media && (
+            <img src={active.stories[active.idx].media} className="max-h-[90vh] max-w-full object-contain"/>
+          )}
+          {active.stories[active.idx]?.caption && (
+            <div className="absolute bottom-10 left-4 right-4 bg-black/50 text-white p-3 rounded-xl">{active.stories[active.idx].caption}</div>
+          )}
+        </div>
+      )}
+
+      {/* Create modal */}
+      {creating && (
+        <div className="fixed inset-0 z-50 bg-black/60 flex items-end md:items-center justify-center p-4">
+          <div className="bg-white rounded-3xl p-5 max-w-md w-full">
+            <div className="flex justify-between items-center mb-3">
+              <div className="font-display text-xl">New Story</div>
+              <button onClick={()=>{setCreating(false); setMedia(null); setCaption("");}} className="text-red-600">Cancel</button>
+            </div>
+            {media ? (
+              <img src={media} className="w-full rounded-xl max-h-72 object-cover"/>
+            ) : (
+              <button onClick={()=>fileRef.current?.click()} className="w-full h-48 border-2 border-dashed border-emerald-brand rounded-xl flex flex-col items-center justify-center">
+                <div className="text-4xl">📷</div>
+                <div className="text-emerald-brand font-bold mt-2">Pick photo</div>
+              </button>
+            )}
+            <input ref={fileRef} type="file" accept="image/*" onChange={handleFile} className="hidden"/>
+            <input value={caption} onChange={e=>setCaption(e.target.value)} placeholder="Caption (optional)" className="inp w-full mt-3"/>
+            <button onClick={post} disabled={!media} className="btn-primary w-full mt-3">Post Story</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SuccessStoriesView({user}) {
+  const [list, setList] = useState([]);
+  useEffect(()=>{ api("/api/success-stories").then(r=>Array.isArray(r)?setList(r):null).catch(()=>{}); }, []);
+  return (
+    <div className="max-w-4xl mx-auto p-5 pb-24">
+      <div className="rounded-3xl gradient-hero text-white p-6 text-center">
+        <div className="text-5xl">💞</div>
+        <div className="font-display text-2xl mt-2">Real Couples, Real Stories</div>
+        <div className="text-white/85 text-sm mt-1">Couples who found their forever on RishtaConnect.</div>
+      </div>
+      <div className="mt-6 grid md:grid-cols-2 gap-4">
+        {list.length === 0 && <div className="col-span-full bg-white rounded-2xl p-8 text-center text-gray-500">No success stories yet.</div>}
+        {list.map(s => (
+          <div key={s._id || s.id} className="bg-white rounded-2xl overflow-hidden shadow-card">
+            {s.photo && <img src={s.photo} className="w-full h-48 object-cover"/>}
+            <div className="p-4">
+              <div className="font-display text-xl">{s.coupleNames || s.title}</div>
+              {s.weddingDate && <div className="text-xs text-amber-600 font-bold mt-1">💍 {new Date(s.weddingDate).toLocaleDateString()}</div>}
+              {s.location && <div className="text-xs text-gray-500">📍 {s.location}</div>}
+              <p className="text-sm mt-2 text-gray-700 leading-relaxed">{s.story}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function PrivacyView({user, setUser}) {
+  const [settings, setSettings] = useState({
+    pinLock: user.pinLock || false,
+    invisibleMode: user.invisibleMode || false,
+    blurPhoto: user.blurPhoto || false,
+    hideOnline: user.hideOnline || false,
+    hideLastSeen: user.hideLastSeen || false,
+    disappearingMessages: user.disappearingMessages || false,
+  });
+  const [pinCode, setPinCode] = useState("");
+  const [blocked, setBlocked] = useState([]);
+  const loadBlocks = ()=> api("/api/blocks").then(r=>Array.isArray(r)?setBlocked(r):null).catch(()=>{});
+  useEffect(()=>{ loadBlocks(); }, []);
+  const toggle = async (k, v) => {
+    setSettings(prev=>({...prev, [k]:v}));
+    try { const r = await api("/api/me/privacy", {method:"PUT", body:{[k]:v}}); if (r?.user) setUser({...r.user, id: r.user._id||r.user.id}); }
+    catch(e) { alert("Failed"); setSettings(prev=>({...prev, [k]:!v})); }
+  };
+  const setPin = async () => {
+    if (!/^\d{4}$/.test(pinCode)) return alert("PIN must be 4 digits");
+    try { await api("/api/me/privacy", {method:"PUT", body:{pinCode, pinLock:true}}); alert("✓ PIN set"); setPinCode(""); }
+    catch(e) { alert("Failed"); }
+  };
+  const unblock = async (uid) => { try { await api("/api/block/"+uid, {method:"DELETE"}); await loadBlocks(); } catch(e){} };
+  const Row = ({icon, label, sub, k}) => (
+    <div className="flex items-center py-3 border-b last:border-0">
+      <div className="text-2xl w-10">{icon}</div>
+      <div className="flex-1">
+        <div className="font-semibold">{label}</div>
+        {sub && <div className="text-xs text-gray-500">{sub}</div>}
+      </div>
+      <label className="relative inline-flex items-center cursor-pointer">
+        <input type="checkbox" checked={settings[k]} onChange={e=>toggle(k, e.target.checked)} className="sr-only peer"/>
+        <div className="w-11 h-6 bg-gray-300 peer-checked:bg-emerald-brand rounded-full peer transition-colors relative">
+          <div className={"absolute top-0.5 w-5 h-5 bg-white rounded-full transition-transform "+(settings[k]?"translate-x-5":"translate-x-0.5")}/>
+        </div>
+      </label>
+    </div>
+  );
+  return (
+    <div className="max-w-3xl mx-auto p-5 pb-24">
+      <h2 className="font-display text-2xl">🔒 Privacy & PIN Lock</h2>
+      <div className="mt-4 bg-white rounded-2xl shadow-card p-4">
+        <div className="font-bold text-emerald-brand mb-2">👁 Visibility</div>
+        <Row icon="🥷" label="Invisible browsing" sub="Browse without being seen in viewers list" k="invisibleMode"/>
+        <Row icon="🌫" label="Blur photos for strangers" sub="Only connected users see your full photos" k="blurPhoto"/>
+        <Row icon="🟢" label="Hide online status" k="hideOnline"/>
+        <Row icon="⏰" label="Hide last seen" k="hideLastSeen"/>
+      </div>
+      <div className="mt-4 bg-white rounded-2xl shadow-card p-4">
+        <div className="font-bold text-emerald-brand mb-2">🔐 PIN Lock</div>
+        <Row icon="🔐" label="App PIN Lock" sub="Require 4-digit PIN to open app" k="pinLock"/>
+        {settings.pinLock && (
+          <div className="flex gap-2 mt-2">
+            <input value={pinCode} onChange={e=>setPinCode(e.target.value.replace(/\D/g,"").slice(0,4))} maxLength={4} type="password" placeholder="New 4-digit PIN" className="inp flex-1 text-center text-2xl tracking-widest"/>
+            <button onClick={setPin} className="btn-primary">Set</button>
+          </div>
+        )}
+      </div>
+      <div className="mt-4 bg-white rounded-2xl shadow-card p-4">
+        <div className="font-bold text-emerald-brand mb-2">💬 Chat Privacy</div>
+        <Row icon="🔥" label="Disappearing messages" sub="Messages auto-delete after 24hr" k="disappearingMessages"/>
+      </div>
+      <div className="mt-4 bg-white rounded-2xl shadow-card p-4">
+        <div className="font-bold text-emerald-brand mb-2">🚫 Blocked Users ({blocked.length})</div>
+        {blocked.length === 0 && <div className="text-gray-400 text-sm p-2">No blocked users.</div>}
+        {blocked.map(b => (
+          <div key={b._id || b.id} className="flex items-center py-2 gap-3">
+            <Avatar kind={b.gender==="Female"?"female":"male"} size={40} photo={b.photos?.[0]}/>
+            <div className="flex-1 font-semibold">{b.name}</div>
+            <button onClick={()=>unblock(b._id || b.id)} className="px-3 py-1.5 bg-red-600 text-white rounded-lg text-xs font-bold">Unblock</button>
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -4754,6 +5234,12 @@ function App(){
         {view==="matchmakers" && user && <MatchmakersMarketplace user={user}/>}
         {view==="meetings" && user && <Meetings user={user}/>}
         {view==="matchmakerDashboard" && user && <MatchmakerDashboard user={user}/>}
+        {view==="interests" && user && <InterestsView user={user} onOpen={(u)=>setActiveProfile(u)}/>}
+        {view==="analytics" && user && <AnalyticsView user={user} onOpen={(u)=>setActiveProfile(u)}/>}
+        {view==="dreamPartner" && user && <DreamPartnerView user={user} onOpen={(u)=>setActiveProfile(u)}/>}
+        {view==="stories" && user && <StoriesView user={user}/>}
+        {view==="successStories" && user && <SuccessStoriesView user={user}/>}
+        {view==="privacy" && user && <PrivacyView user={user} setUser={setUser}/>}
         {view==="admin" && user && <AdminPanel users={users} setUsers={setUsers}/>}
 
         {activeProfile && user && (() => {
