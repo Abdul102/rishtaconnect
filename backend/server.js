@@ -70,8 +70,10 @@ const UserSchema = new mongoose.Schema({
   verifications: { phone: Boolean, email: Boolean, cnic: Boolean, face: Boolean, family: Boolean, business: Boolean },
   trustScore: { type: Number, default: 60 }, plan: { type: String, default: "Free" }, planExpires: Date,
   cnic: String, deviceId: String, banned: Boolean, flagged: Boolean,
+  caste: String, whatsappNumber: String, addedBy: String, importSource: String,
+  mustChangePassword: Boolean, avatarType: String, urduMeta: Object,
   lastActive: { type: Date, default: Date.now }, createdAt: { type: Date, default: Date.now }
-}, { _id: false });
+}, { _id: false, strict: false });
 
 const BlogSchema = new mongoose.Schema({
   _id: { type: String, default: uuid },
@@ -301,7 +303,7 @@ function compatibility(a, b) {
 }
 function sanitize(u) {
   if (!u) return u;
-  const { password, ...rest } = u;
+  const { password, pinCode, ...rest } = u;
   return rest;
 }
 
@@ -328,15 +330,46 @@ app.post("/api/auth/signup", async (req, res) => {
 
 app.post("/api/auth/login", async (req, res) => {
   try {
-    const { email, password } = req.body;
-    const user = await db.findOne("users", { email });
+    const { email, password, phone } = req.body;
+    let user = null;
+    if (email) user = await db.findOne("users", { email });
+    if (!user && phone) {
+      // Try phone-based login (for imported users with no email)
+      const normalized = normalizePhone(phone);
+      const all = await db.find("users", {});
+      user = all.find(u => normalizePhone(u.phone || u.whatsappNumber) === normalized);
+    }
     if (!user) return res.status(400).json({ error: "Invalid credentials" });
     const ok = await bcrypt.compare(password, user.password || "");
     if (!ok) return res.status(400).json({ error: "Invalid credentials" });
     if (user.banned) return res.status(403).json({ error: "Account banned" });
     await db.update("users", { _id: user._id || user.id }, { lastActive: new Date() });
     const token = jwt.sign({ id: user._id || user.id, role: user.role }, JWT_SECRET, { expiresIn: "7d" });
-    res.json({ token, user: sanitize(user) });
+    res.json({
+      token,
+      user: sanitize(user),
+      mustChangePassword: !!user.mustChangePassword
+    });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Change password — used for first-login forced change + general password updates
+app.post("/api/auth/change-password", auth, async (req, res) => {
+  try {
+    const { currentPassword, newPassword } = req.body || {};
+    if (!newPassword || newPassword.length < 6) return res.status(400).json({ error: "New password must be at least 6 characters" });
+    const user = await db.findOne("users", { _id: req.user.id });
+    if (!user) return res.status(404).json({ error: "Not found" });
+    // For forced first-time change, current may not be required if mustChangePassword === true and the user signs in with default password
+    if (currentPassword) {
+      const ok = await bcrypt.compare(currentPassword, user.password || "");
+      if (!ok) return res.status(400).json({ error: "Current password is incorrect" });
+    }
+    const hash = await bcrypt.hash(newPassword, 10);
+    await db.update("users", { _id: req.user.id }, {
+      password: hash, mustChangePassword: false, passwordChangedAt: new Date()
+    });
+    res.json({ ok: true, message: "Password updated successfully" });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -485,6 +518,252 @@ app.put("/api/me", auth, async (req, res) => {
       ? "Saved. Sensitive fields are pending admin review."
       : "Profile updated."
   });
+});
+
+/* ==================== BULK USER IMPORT (Admin) ==================== */
+// Urdu → English mapping for common fields
+const URDU_MAP = {
+  // Gender
+  "لڑکا": "Male", "لڑکی": "Female", "مرد": "Male", "عورت": "Female",
+  // Marital status
+  "کنوارا": "Never Married", "کنواری": "Never Married",
+  "شادی شدہ": "Married", "طلاق یافتہ": "Divorced", "مطلقہ": "Divorced",
+  "رنڈوا": "Widowed", "بیوہ": "Widowed",
+  // Sect
+  "اہلسنت": "Sunni", "اہل سنت": "Sunni", "اہل تشیع": "Shia", "شیعہ": "Shia",
+  // Job / business
+  "جاب": "Job", "بزنس": "Business", "کاروبار": "Business",
+  // Cities (Urdu name → English)
+  "لاہور": "Lahore", "کراچی": "Karachi", "اسلام آباد": "Islamabad",
+  "راولپنڈی": "Rawalpindi", "فیصل آباد": "Faisalabad", "ملتان": "Multan",
+  "پشاور": "Peshawar", "کوئٹہ": "Quetta", "گوجرانوالہ": "Gujranwala",
+  "سیالکوٹ": "Sialkot", "سرگودھا": "Sargodha", "ساہیوال": "Sahiwal",
+  "بہاولپور": "Bahawalpur", "جھنگ": "Jhang", "قصور": "Kasur",
+  "اوکاڑہ": "Okara", "وزیرآباد": "Wazirabad", "پتوکی": "Pattoki",
+  "ٹوبہ ٹیک سنگھ": "Toba Tek Singh", "ایبٹ آباد": "Abbottabad",
+  "وہاڑی": "Vehari", "بورے والا": "Burewala", "واہ کینٹ": "Wah Cantt",
+  "منڈی بہاؤالدین": "Mandi Bahauddin", "لاپور": "Lahore",
+};
+
+function tr(v) {
+  if (!v || typeof v !== "string") return v;
+  const t = v.trim();
+  return URDU_MAP[t] || t;
+}
+
+// Normalize phone to E.164 canonical form.
+// - Pakistani 03xx/+92 → +92xxxxxxxxxx
+// - Other international (+CC...) kept as +CC followed by digits
+function normalizePhone(raw) {
+  if (!raw) return null;
+  const s = String(raw).trim();
+  // Detect international country code other than 92
+  const intl = s.match(/^\+\s*(\d{1,3})\s*(.+)$/);
+  if (intl) {
+    const cc = intl[1];
+    const rest = intl[2].replace(/\D/g, "");
+    if (cc === "92") {
+      const local = rest.startsWith("0") ? rest.slice(1) : rest;
+      if (!/^\d{9,11}$/.test(local)) return null;
+      return "+92" + local;
+    }
+    // Other countries — keep as +CC + digits, basic sanity 6-15 digits
+    if (!/^\d{6,15}$/.test(rest)) return null;
+    return "+" + cc + rest;
+  }
+  // No leading + → treat as Pakistan local
+  let p = s.replace(/[^\d]/g, "");
+  if (p.startsWith("92")) p = p.slice(2);
+  else if (p.startsWith("0")) p = p.slice(1);
+  if (!/^\d{9,11}$/.test(p)) return null;
+  return "+92" + p;
+}
+
+function parseResidenceMarla(v) {
+  if (!v) return null;
+  const m = String(v).match(/(\d+)/);
+  return m ? +m[1] + " Marla" : v;
+}
+
+// Map a raw JSON record (any of the two supported shapes) into our user document
+function mapImportRecord(raw) {
+  // Support both: flat record OR the {image_N: [...]} wrapped style
+  const r = raw || {};
+  const gender = tr(r.gender || r.Gender) || "Male";
+  const maritalStatus = tr(r.marital_status || r.maritalStatus || r.Marital) || "Never Married";
+  const sect = tr(r.sect || r.Sect) || "Sunni";
+  const city = tr(r.city || r.City) || "";
+  const job = tr(r.job_business || r.job || r.Job) || "";
+  const phone = normalizePhone(r.phone_number || r.phone || r.whatsapp || r.whatsappNumber);
+  const name = (r.name || "").toString().trim();
+  // Generate a synthetic email from phone (since no email in imports)
+  const phoneDigits = phone ? phone.replace(/\D/g, "") : null;
+  const email = phoneDigits ? `imp_${phoneDigits}@rishta.import` : null;
+
+  return {
+    name: name || `User ${phone ? phone.slice(-4) : Math.random().toString(36).slice(-4)}`,
+    email, phone,
+    whatsappNumber: phone,
+    gender,
+    age: +r.age || null,
+    height: r.height || "",
+    maritalStatus,
+    sect,
+    religion: "Islam",
+    caste: r.caste || "",
+    city,
+    country: "Pakistan",
+    qualification: r.education || "",
+    profession: job,
+    income: r.monthly_income || "",
+    fatherProfession: "",
+    motherProfession: "",
+    siblings: [r.brothers && `${r.brothers} brother${r.brothers > 1 ? "s" : ""}`, r.sisters && `${r.sisters} sister${r.sisters > 1 ? "s" : ""}`].filter(Boolean).join(", "),
+    familyType: "Moderate",
+    namaz: "",
+    religiousLevel: "Moderate",
+    nature: "",
+    smoking: "No",
+    bio: [
+      name && `Assalamu Alaikum, I am ${name}.`,
+      r.age && `${r.age} years old`,
+      r.education && `holding ${r.education}`,
+      city && `from ${tr(city)}`,
+      job && `working as ${tr(job)}`,
+      maritalStatus && maritalStatus.toLowerCase() !== "never married" && `Marital status: ${maritalStatus}`,
+      "Looking for a respectful rishta inshaAllah."
+    ].filter(Boolean).join(". "),
+    photos: [],
+    addedBy: "admin",
+    importSource: "json_import",
+    mustChangePassword: true,
+    avatarType: gender === "Female" ? "default_female" : gender === "Male" ? "default_male" : "default_neutral",
+    plan: "Free",
+    trustScore: 55,
+    verifications: { phone: false, email: false, cnic: false, face: false, family: false, business: false },
+    urduMeta: {
+      original_city: r.city,
+      original_gender: r.gender,
+      original_marital: r.marital_status,
+      original_sect: r.sect,
+      residence: parseResidenceMarla(r.residence_size),
+      registration_date: r.registration_date || null,
+      address: r.address || null,
+    }
+  };
+}
+
+// Flatten input: accept either flat array OR [{image_1:[...]}, {image_2:[...]}] style
+function flattenImportData(input) {
+  const arr = Array.isArray(input) ? input : [input];
+  const out = [];
+  for (const item of arr) {
+    if (!item || typeof item !== "object") continue;
+    // If the item itself looks like a profile (has name/phone/gender), take it directly
+    if (item.phone_number || item.phone || item.name || item.gender) {
+      out.push(item);
+      continue;
+    }
+    // Else it's a wrapper {image_N: [...]}
+    for (const k of Object.keys(item)) {
+      if (Array.isArray(item[k])) out.push(...item[k]);
+    }
+  }
+  return out;
+}
+
+const DEFAULT_IMPORT_PASSWORD = process.env.DEFAULT_IMPORT_PASSWORD || "RishtaConnect123";
+
+// Admin: preview import without committing
+app.post("/api/admin/import-users/preview", auth, adminOnly, async (req, res) => {
+  try {
+    const flat = flattenImportData(req.body?.data);
+    const allUsers = await db.find("users", {});
+    const phoneIndex = new Set(allUsers.map(u => normalizePhone(u.phone || u.whatsappNumber)).filter(Boolean));
+    const seenPhones = new Set();
+    const report = { totalIn: flat.length, valid: 0, invalid: 0, duplicates: 0, samples: [] };
+    const result = [];
+    for (const raw of flat) {
+      const m = mapImportRecord(raw);
+      if (!m.phone) { report.invalid++; result.push({ status: "invalid", reason: "Invalid phone", raw }); continue; }
+      if (phoneIndex.has(m.phone) || seenPhones.has(m.phone)) { report.duplicates++; result.push({ status: "duplicate", phone: m.phone, name: m.name }); continue; }
+      seenPhones.add(m.phone);
+      report.valid++;
+      result.push({ status: "ok", mapped: m });
+    }
+    report.samples = result.slice(0, 5);
+    res.json({ report, count: result.length, willImport: report.valid });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Core import logic — reusable by both endpoints
+async function runImport(data, importerUserId) {
+  const flat = flattenImportData(data);
+  const allUsers = await db.find("users", {});
+  const phoneIndex = new Set(allUsers.map(u => normalizePhone(u.phone || u.whatsappNumber)).filter(Boolean));
+  const hash = await bcrypt.hash(DEFAULT_IMPORT_PASSWORD, 10);
+  let created = 0, skipped = 0, errors = [];
+  const createdIds = [];
+  for (const raw of flat) {
+    try {
+      const m = mapImportRecord(raw);
+      if (!m.phone) { skipped++; continue; }
+      if (phoneIndex.has(m.phone)) { skipped++; continue; }
+      phoneIndex.add(m.phone);
+      const user = { _id: uuid(), ...m, password: hash, role: "user", createdAt: new Date(), lastActive: new Date() };
+      await db.insert("users", user);
+      createdIds.push(user._id);
+      created++;
+    } catch (e) {
+      errors.push({ name: raw?.name, error: e.message });
+    }
+  }
+  if (importerUserId) {
+    await db.insert("activityLogs", {
+      _id: uuid(), userId: importerUserId, type: "bulk_import",
+      details: { created, skipped, errors: errors.length }, time: new Date()
+    });
+  }
+  return {
+    ok: true, created, skipped, errorCount: errors.length, errors: errors.slice(0, 5),
+    defaultPassword: DEFAULT_IMPORT_PASSWORD,
+    createdIds: createdIds.slice(0, 20),
+    message: `Imported ${created} users. Skipped ${skipped} (duplicates/invalid). Default password: ${DEFAULT_IMPORT_PASSWORD}`
+  };
+}
+
+// Admin: commit import
+app.post("/api/admin/import-users", auth, adminOnly, async (req, res) => {
+  try {
+    const result = await runImport(req.body?.data, req.user.id);
+    res.json(result);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Public: admin-added profiles section
+app.get("/api/admin-added-users", auth, async (req, res) => {
+  const list = (await db.find("users", { addedBy: "admin" }))
+    .filter(u => !u.banned && u.role !== "admin")
+    .map(u => ({ ...sanitize(u), password: undefined }))
+    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  res.json(list);
+});
+
+// Bootstrap: one-shot import from backend/seed-users.json (idempotent — skips dupes)
+app.post("/api/admin/bootstrap-import", auth, adminOnly, async (req, res) => {
+  try {
+    const seedPath = path.join(__dirname, "seed-users.json");
+    if (!fs.existsSync(seedPath)) return res.status(404).json({ error: "seed-users.json not shipped with backend" });
+    const data = JSON.parse(fs.readFileSync(seedPath, "utf-8"));
+    const result = await runImport(data, req.user.id);
+    res.json(result);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
 /* ---- Dedicated photo upload endpoint (always immediate, no admin review) ---- */
