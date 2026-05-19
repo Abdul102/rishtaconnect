@@ -420,7 +420,13 @@ function compatibility(a,b){
 
 /* ---------------- Avatars (real photo or SVG fallback) ---------------- */
 function Avatar({kind="male", blur=false, size=80, photo=null}) {
-  const bg = kind==="male" ? "#0f766e" : "#be185d";
+  // Gender-specific palette: male = teal, female = rose, neutral = slate
+  const palette = {
+    male: { bg: "#0f766e", bg2: "#134e4a" },
+    female: { bg: "#be185d", bg2: "#831843" },
+    neutral: { bg: "#475569", bg2: "#1e293b" }
+  };
+  const p = palette[kind] || palette.neutral;
   if (photo) {
     return (
       <div className={"relative rounded-full overflow-hidden "+(blur?"blur-photo":"")}
@@ -429,15 +435,42 @@ function Avatar({kind="male", blur=false, size=80, photo=null}) {
       </div>
     );
   }
+  // Gender-specific default SVG silhouette
+  const svgInner = kind === "female" ? (
+    <g>
+      <circle cx="12" cy="7" r="3.4"/>
+      {/* Hijab/hair drape */}
+      <path d="M8.6 5.5 Q12 2.5 15.4 5.5 Q15.8 8 14.5 9.5"/>
+      <path d="M4.5 20.5 C6 16, 9 14.5, 12 14.5 S18 16, 19.5 20.5"/>
+    </g>
+  ) : kind === "male" ? (
+    <g>
+      <circle cx="12" cy="8" r="3.6"/>
+      <path d="M4.5 20c2-4 5.5-5 7.5-5s5.5 1 7.5 5"/>
+    </g>
+  ) : (
+    <g>
+      <circle cx="12" cy="8" r="4"/>
+      <path d="M4 20c2-4 6-5 8-5s6 1 8 5"/>
+    </g>
+  );
   return (
     <div className={"relative rounded-full overflow-hidden flex items-center justify-center text-white font-bold "+(blur?"blur-photo":"")}
-      style={{width:size, height:size, background:`linear-gradient(135deg,${bg},#134e4a)`}}>
-      <svg width={size*0.55} height={size*0.55} viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-        <circle cx="12" cy="8" r="4"/>
-        <path d="M4 20c2-4 6-5 8-5s6 1 8 5"/>
+      style={{width:size, height:size, background:`linear-gradient(135deg,${p.bg},${p.bg2})`}}>
+      <svg width={size*0.6} height={size*0.6} viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        {svgInner}
       </svg>
     </div>
   );
+}
+
+// Helper: derive avatar kind from a user object
+function avatarKind(u) {
+  if (!u) return "neutral";
+  const g = (u.gender || "").toString().toLowerCase();
+  if (g === "female" || g === "f") return "female";
+  if (g === "male" || g === "m") return "male";
+  return "neutral";
 }
 
 /* ---------------- Notification Sound (Web Audio) ---------------- */
@@ -1688,17 +1721,23 @@ function Stat({label,value}){
 
 /* ---------------- Profile Card ---------------- */
 function ProfileCard({u, onOpen, compact}){
+  const wa = (u.whatsappNumber || u.phone || "").replace(/[^0-9]/g, "");
   return (
-    <div className="bg-white rounded-2xl shadow-card border border-gray-100 overflow-hidden">
+    <div className="bg-white rounded-2xl shadow-card border border-gray-100 overflow-hidden relative">
+      {u.addedBy === "admin" && (
+        <div className="absolute top-2 right-2 z-10 chip bg-amber-500 text-white text-[10px] shadow">🛡 Added by Admin</div>
+      )}
       <div className="p-4 flex items-center gap-3">
-        <Avatar kind={u.gender==="Female"?"female":"male"} blur={u.blurPhoto} size={64} photo={u.photos?.[0]}/>
+        <Avatar kind={avatarKind(u)} blur={u.blurPhoto} size={64} photo={u.photos?.[0]}/>
         <div className="flex-1">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <div className="font-semibold">{u.name}</div>
             {u.verifications?.cnic && <span className="chip badge-verified">✓</span>}
             {u.overseas && <span className="chip bg-blue-50 text-blue-700">✈ Overseas</span>}
+            {u.boostedUntil && new Date(u.boostedUntil) > new Date() && <span className="chip bg-amber-100 text-amber-700">🚀 Boosted</span>}
           </div>
           <div className="text-sm text-gray-600">{u.age} • {u.profession} • {u.city}</div>
+          {u.caste && <div className="text-xs text-gray-500">{u.caste}</div>}
           <div className="text-xs text-gray-500 mt-0.5 font-urdu">{u.nameUr}</div>
         </div>
         {u.score!=null && (
@@ -1714,9 +1753,16 @@ function ProfileCard({u, onOpen, compact}){
         {u.verifications?.business && <span className="chip bg-violet-50 text-violet-700">💼 Business</span>}
         <span className="chip bg-gray-100 text-gray-700">{u.timeline}</span>
       </div>
+      {u.addedBy === "admin" && (
+        <div className="mx-4 mb-2 text-[11px] bg-amber-50 border border-amber-200 text-amber-800 rounded-lg p-2">
+          📌 Admin-added profile. Please contact <strong>only via WhatsApp</strong>.
+        </div>
+      )}
       <div className="px-4 pb-4 flex gap-2">
         <button onClick={onOpen} className="btn-primary flex-1 py-2 rounded-xl text-sm font-semibold">View Profile</button>
-        <a href={"https://wa.me/"+((u.phone||"").replace(/[^0-9]/g,""))} target="_blank" onClick={e=>e.stopPropagation()} className="px-3 py-2 rounded-xl bg-green-500 text-white text-sm font-semibold" title="WhatsApp">💬</a>
+        {wa && (
+          <a href={"https://wa.me/"+wa} target="_blank" rel="noopener noreferrer" onClick={e=>e.stopPropagation()} className="px-3 py-2 rounded-xl bg-green-500 text-white text-sm font-semibold" title="WhatsApp">💬</a>
+        )}
         <button className="px-3 py-2 rounded-xl border text-sm font-semibold" title="Save">💚</button>
       </div>
     </div>
@@ -1926,8 +1972,20 @@ function ProfileDetail({u, user, onClose, onChat, onInterest}){
           </div>
         </div>
         <div className="p-5">
+          {u.addedBy === "admin" && (
+            <div className="mb-4 rounded-2xl bg-amber-50 border-2 border-amber-300 p-3 flex items-start gap-3">
+              <div className="text-2xl">🛡️</div>
+              <div className="flex-1 text-sm text-amber-900">
+                <div className="font-bold">Added by Admin</div>
+                <div className="text-xs mt-0.5">
+                  This profile was added by admin from offline registration. Please contact them <strong>only via WhatsApp</strong>.
+                  In-app chat may not be active yet.
+                </div>
+              </div>
+            </div>
+          )}
           <div className="flex items-start gap-4">
-            <Avatar kind={u.gender==="Female"?"female":"male"} blur={u.blurPhoto} size={110}/>
+            <Avatar kind={avatarKind(u)} blur={u.blurPhoto} size={110} photo={u.photos?.[0]}/>
             <div className="flex-1">
               <div className="text-xl font-display">{u.name}</div>
               <div className="text-gray-600 text-sm">{u.age} yrs • {u.height} • {u.maritalStatus}</div>
@@ -2614,6 +2672,8 @@ function MyProfile({user, setUser, onLogout, onEdit, onNav}){
         </div>
         <div className="p-5 grid md:grid-cols-3 gap-3">
           <ActionTile icon="✏️" t={pendingEdit?"Edit Locked":"Edit Biodata"} onClick={()=> pendingEdit ? alert("Your previous edit is still pending admin review. Please wait for approval before making new changes.") : onEdit()}/>
+          <ActionTile icon="🛡️" t="Admin Added Profiles" onClick={()=>onNav("adminAdded")}/>
+          {user.role === "admin" && <ActionTile icon="📥" t="Bulk Import Users" onClick={()=>onNav("adminImport")}/>}
           <ActionTile icon="🪄" t="AI Dream Partner" onClick={()=>onNav("dreamPartner")}/>
           <ActionTile icon="⭐" t="My Interests" onClick={()=>onNav("interests")}/>
           <ActionTile icon="👀" t="Who Viewed Me" onClick={()=>onNav("analytics")}/>
@@ -3071,6 +3131,248 @@ function PrivacyView({user, setUser}) {
             <button onClick={()=>unblock(b._id || b.id)} className="px-3 py-1.5 bg-red-600 text-white rounded-lg text-xs font-bold">Unblock</button>
           </div>
         ))}
+      </div>
+    </div>
+  );
+}
+
+/* ====================================================================
+   ADMIN BULK IMPORT (paste JSON → preview → commit)
+   ==================================================================== */
+function AdminImportView({user}) {
+  const [raw, setRaw] = useState("");
+  const [parsed, setParsed] = useState(null);
+  const [preview, setPreview] = useState(null);
+  const [committing, setCommitting] = useState(false);
+  const [result, setResult] = useState(null);
+  const [parseErr, setParseErr] = useState("");
+
+  const tryParse = () => {
+    setParseErr("");
+    try {
+      const j = JSON.parse(raw);
+      setParsed(j);
+      return j;
+    } catch (e) { setParseErr("Invalid JSON: " + e.message); setParsed(null); return null; }
+  };
+
+  const doPreview = async () => {
+    const j = tryParse(); if (!j) return;
+    try {
+      const r = await api("/api/admin/import-users/preview", { method: "POST", body: { data: j } });
+      setPreview(r);
+    } catch (e) { alert("Preview failed: " + e.message); }
+  };
+
+  const doImport = async () => {
+    const j = tryParse(); if (!j) return;
+    if (!confirm("Import users to the live database? This action cannot be undone.")) return;
+    setCommitting(true); setResult(null);
+    try {
+      const r = await api("/api/admin/import-users", { method: "POST", body: { data: j } });
+      setResult(r);
+    } catch (e) { alert("Import failed: " + e.message); }
+    finally { setCommitting(false); }
+  };
+
+  const doBootstrap = async () => {
+    if (!confirm("Import the 104 seed users shipped with the backend? Already-imported phones will be skipped.")) return;
+    setCommitting(true); setResult(null);
+    try {
+      const r = await api("/api/admin/bootstrap-import", { method: "POST", body: {} });
+      setResult(r);
+    } catch (e) { alert("Bootstrap import failed: " + e.message); }
+    finally { setCommitting(false); }
+  };
+
+  return (
+    <div className="max-w-4xl mx-auto p-5 pb-24">
+      <h2 className="font-display text-2xl">📥 Bulk JSON Import</h2>
+      <p className="text-gray-500 text-sm mt-1">
+        Paste a JSON array of profiles, preview the mapping, then commit. Urdu fields (لڑکا, کنوارا, اہلسنت, لاہور) auto-translate.
+        Duplicates are skipped by phone number.
+      </p>
+
+      <div className="mt-4 grid md:grid-cols-2 gap-3">
+        <button onClick={doBootstrap} disabled={committing} className="btn-primary py-3 rounded-xl disabled:opacity-50">
+          🚀 Import 104 Seed Users (shipped with backend)
+        </button>
+        <button onClick={() => setRaw('[\n  {\n    "name": "Sana",\n    "gender": "Female",\n    "age": 24,\n    "city": "Karachi",\n    "education": "BS Textile Designing",\n    "caste": "Ansari",\n    "phone": "03240424572",\n    "maritalStatus": "Single",\n    "height": "5.4"\n  }\n]')} className="btn-gold py-3 rounded-xl">
+          📋 Insert Example Template
+        </button>
+      </div>
+
+      <textarea
+        value={raw}
+        onChange={e => setRaw(e.target.value)}
+        placeholder='Paste JSON here, e.g. [{"name":"Sana","gender":"Female","phone":"03001234567",...}]'
+        className="inp w-full mt-4 min-h-[260px] font-mono text-xs"
+      />
+      {parseErr && <div className="mt-2 text-red-600 text-sm">⚠ {parseErr}</div>}
+
+      <div className="mt-3 flex gap-2">
+        <button onClick={doPreview} disabled={!raw.trim()} className="btn-gold px-5 py-2.5 rounded-xl disabled:opacity-50">🔍 Preview</button>
+        <button onClick={doImport} disabled={!raw.trim() || committing} className="btn-primary px-5 py-2.5 rounded-xl disabled:opacity-50">
+          {committing ? "Importing..." : "✓ Commit Import"}
+        </button>
+      </div>
+
+      {preview && (
+        <div className="mt-5 bg-white rounded-2xl p-4 shadow-card">
+          <div className="font-bold text-emerald-brand mb-2">Import Preview</div>
+          <div className="grid grid-cols-4 gap-2">
+            <ImportStat label="Total" value={preview.report?.totalIn} />
+            <ImportStat label="Will Import" value={preview.willImport} color="green" />
+            <ImportStat label="Duplicates" value={preview.report?.duplicates} color="amber" />
+            <ImportStat label="Invalid" value={preview.report?.invalid} color="red" />
+          </div>
+          {preview.report?.samples?.length > 0 && (
+            <div className="mt-3">
+              <div className="text-xs font-semibold text-gray-600 mb-1">First 5 samples:</div>
+              <div className="space-y-1 text-xs font-mono bg-cream rounded-lg p-3 max-h-72 overflow-auto">
+                {preview.report.samples.map((s, i) => (
+                  <div key={i} className={"py-1 " + (s.status === "ok" ? "text-emerald-700" : s.status === "duplicate" ? "text-amber-700" : "text-red-700")}>
+                    [{s.status}] {s.mapped?.name || s.name || s.raw?.name} — {s.mapped?.phone || s.phone}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {result && (
+        <div className="mt-5 bg-emerald-50 border-2 border-emerald-300 rounded-2xl p-5">
+          <div className="text-2xl">✅</div>
+          <div className="font-bold text-emerald-800 mt-2">Import Complete</div>
+          <div className="grid grid-cols-3 gap-2 mt-3">
+            <ImportStat label="Created" value={result.created} color="green" />
+            <ImportStat label="Skipped" value={result.skipped} color="amber" />
+            <ImportStat label="Errors" value={result.errorCount} color="red" />
+          </div>
+          {result.defaultPassword && (
+            <div className="mt-3 text-sm">
+              <div className="font-semibold">Default password for imported users:</div>
+              <div className="mt-1 bg-white px-3 py-2 rounded font-mono text-emerald-700 inline-block">{result.defaultPassword}</div>
+              <div className="text-xs text-gray-600 mt-1">They will be forced to change this on first login.</div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ImportStat({label, value, color}) {
+  const map = {green:"text-green-700 bg-green-50 border-green-200", amber:"text-amber-700 bg-amber-50 border-amber-200", red:"text-red-700 bg-red-50 border-red-200"};
+  return (
+    <div className={"rounded-xl p-3 border "+(map[color] || "border-gray-200 bg-gray-50")}>
+      <div className="text-2xl font-bold">{value ?? 0}</div>
+      <div className="text-xs font-semibold uppercase">{label}</div>
+    </div>
+  );
+}
+
+/* ====================================================================
+   ADMIN-ADDED USERS SECTION (with "Added by Admin" badge + WhatsApp note)
+   ==================================================================== */
+function AdminAddedView({user, onOpen}) {
+  const [list, setList] = useState([]);
+  const [loading, setLoading] = useState(true);
+  useEffect(()=>{
+    api("/api/admin-added-users").then(r=>{ if(Array.isArray(r)) setList(r); setLoading(false); }).catch(()=>setLoading(false));
+  }, []);
+  return (
+    <div className="max-w-5xl mx-auto p-5 pb-24">
+      <h2 className="font-display text-2xl">🛡️ Admin Added Profiles</h2>
+      <div className="mt-2 rounded-2xl bg-amber-50 border-2 border-amber-300 p-4 text-amber-900 text-sm">
+        <div className="font-bold">📌 Important Note</div>
+        <div className="mt-1">
+          These users were added by admin from offline registrations. They have not registered in-app yet.
+          Please contact them <strong>only through WhatsApp</strong>. In-app chat may not be active for these profiles.
+        </div>
+      </div>
+      {loading && <div className="text-center text-gray-500 mt-8">Loading...</div>}
+      {!loading && list.length === 0 && <div className="text-center text-gray-500 mt-8">No admin-added profiles yet.</div>}
+      <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-3 mt-4">
+        {list.map(u => <AdminAddedCard key={u._id||u.id} u={u} onOpen={onOpen} />)}
+      </div>
+    </div>
+  );
+}
+
+function AdminAddedCard({u, onOpen}) {
+  const wa = (u.whatsappNumber || u.phone || "").replace(/[^0-9]/g, "");
+  return (
+    <div className="bg-white rounded-2xl shadow-card p-4 hover:shadow-lg transition-all cursor-pointer" onClick={()=>onOpen(u)}>
+      <div className="absolute -mt-2 -ml-2 chip bg-amber-500 text-white text-xs">🛡️ Added by Admin</div>
+      <div className="flex items-center gap-3 mt-3">
+        <Avatar kind={avatarKind(u)} size={60} photo={u.photos?.[0]} />
+        <div className="flex-1 min-w-0">
+          <div className="font-bold truncate">{u.name}</div>
+          <div className="text-xs text-gray-500 truncate">{[u.age && u.age+"yr", u.city, u.profession].filter(Boolean).join(" • ")}</div>
+        </div>
+      </div>
+      {u.caste && <div className="text-xs text-gray-500 mt-2">Caste: <span className="font-semibold">{u.caste}</span></div>}
+      {u.qualification && <div className="text-xs text-gray-500">Education: {u.qualification}</div>}
+      <div className="mt-3 flex gap-2">
+        {wa && (
+          <a
+            href={"https://wa.me/" + wa}
+            target="_blank" rel="noopener noreferrer"
+            onClick={e=>e.stopPropagation()}
+            className="flex-1 px-3 py-2 rounded-lg bg-green-500 hover:bg-green-600 text-white text-xs font-bold text-center"
+          >💬 WhatsApp</a>
+        )}
+        <button onClick={(e)=>{e.stopPropagation(); onOpen(u);}} className="px-3 py-2 rounded-lg border text-xs font-bold">👁 View</button>
+      </div>
+    </div>
+  );
+}
+
+/* ====================================================================
+   FORCE PASSWORD CHANGE MODAL (shown on first login when mustChangePassword=true)
+   ==================================================================== */
+function ChangePasswordModal({user, onDone, forced=true}) {
+  const [oldP, setOldP] = useState("");
+  const [newP, setNewP] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [busy, setBusy] = useState(false);
+  const submit = async () => {
+    if (newP.length < 6) return alert("New password must be at least 6 characters");
+    if (newP !== confirm) return alert("Passwords do not match");
+    setBusy(true);
+    try {
+      await api("/api/auth/change-password", {method:"POST", body:{currentPassword: forced ? undefined : oldP, newPassword: newP}});
+      onDone();
+    } catch (e) { alert("Failed: " + e.message); }
+    finally { setBusy(false); }
+  };
+  return (
+    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur flex items-center justify-center p-4">
+      <div className="bg-white max-w-md w-full rounded-3xl p-6 shadow-soft">
+        <div className="text-center">
+          <div className="text-5xl">🔐</div>
+          <h3 className="font-display text-2xl mt-3">{forced ? "Set Your New Password" : "Change Password"}</h3>
+          {forced ? (
+            <p className="text-sm text-gray-600 mt-2">
+              Welcome, {user?.name || "User"}! For your security, please change the default password before continuing.
+            </p>
+          ) : (
+            <p className="text-sm text-gray-600 mt-2">Enter your current password and choose a new one.</p>
+          )}
+        </div>
+        <div className="mt-5 space-y-3">
+          {!forced && (
+            <input value={oldP} onChange={e=>setOldP(e.target.value)} type="password" placeholder="Current password" className="inp w-full"/>
+          )}
+          <input value={newP} onChange={e=>setNewP(e.target.value)} type="password" placeholder="New password (min 6 chars)" className="inp w-full"/>
+          <input value={confirm} onChange={e=>setConfirm(e.target.value)} type="password" placeholder="Confirm new password" className="inp w-full"/>
+        </div>
+        <button onClick={submit} disabled={busy} className="btn-primary w-full mt-5 py-3 rounded-xl disabled:opacity-50">
+          {busy ? "Updating..." : "✓ Update Password"}
+        </button>
+        {forced && <div className="text-xs text-amber-700 text-center mt-3">You cannot skip this step.</div>}
       </div>
     </div>
   );
@@ -4787,6 +5089,7 @@ function App(){
   const [activeProfile, setActiveProfile] = useState(null);
   const [messages, setMessages] = useState(SEED_MESSAGES);
   const [chatTargetUser, setChatTargetUser] = useState(null);  // who to auto-open in chat
+  const [forceChangePassword, setForceChangePassword] = useState(false);
   // Smart unread tracking using lastRead timestamps per partner
   const [unreadMsgs, setUnreadMsgs] = useState(0);
   const [unreadNotifs, setUnreadNotifs] = useState(0);
@@ -4867,6 +5170,7 @@ function App(){
             if (verified) {
               const u = { ...verified, id: verified._id || verified.id };
               setUser(u);
+              if (u.mustChangePassword) setForceChangePassword(true);
               const isAdminPath = location.hash.startsWith("#/admin");
               if (u.role === "admin" && isAdminPath) {
                 setView("admin");
@@ -4905,6 +5209,10 @@ function App(){
     localStorage.setItem("rishta_token", res.token);
     const u = { ...res.user, id: res.user._id || res.user.id };
     setUser(u);
+    // Force password change if backend flagged it OR user object says so
+    if (res.mustChangePassword || u.mustChangePassword) {
+      setForceChangePassword(true);
+    }
     if (u.role === "admin") {
       location.hash = "#/admin/dashboard";
       setView("admin");
@@ -5240,6 +5548,8 @@ function App(){
         {view==="stories" && user && <StoriesView user={user}/>}
         {view==="successStories" && user && <SuccessStoriesView user={user}/>}
         {view==="privacy" && user && <PrivacyView user={user} setUser={setUser}/>}
+        {view==="adminAdded" && user && <AdminAddedView user={user} onOpen={(u)=>setActiveProfile(u)}/>}
+        {view==="adminImport" && user && user.role === "admin" && <AdminImportView user={user}/>}
         {view==="admin" && user && <AdminPanel users={users} setUsers={setUsers}/>}
 
         {activeProfile && user && (() => {
@@ -5281,6 +5591,15 @@ function App(){
 
         {isAuthed && view!=="landing" && view!=="setup" && view!=="login" && view!=="signup" && (
           <BottomNav view={view} onNav={setView} unreadMsgs={unreadMsgs} unreadNotifs={unreadNotifs}/>
+        )}
+
+        {/* Force Password Change Modal (shown when imported user first logs in) */}
+        {forceChangePassword && user && (
+          <ChangePasswordModal user={user} forced={true} onDone={async ()=>{
+            setForceChangePassword(false);
+            // Refresh user object
+            try { const me = await api("/api/me"); if (me) setUser({...me, id: me._id||me.id}); } catch(e){}
+          }}/>
         )}
 
         {/* Logout Confirmation Modal */}
