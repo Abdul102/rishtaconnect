@@ -31,7 +31,35 @@
     --cream: #fbf7f0;
     --rose: #be185d;
     --ink: #1f2937;
+    --surface: #ffffff;
+    --surface-2: #fbf7f0;
+    --border: #e5e7eb;
+    --muted: #6b7280;
   }
+  [data-theme="dark"] {
+    --cream: #0b1220;
+    --surface: #131c2e;
+    --surface-2: #1a2438;
+    --border: #2a3346;
+    --ink: #e5e7eb;
+    --muted: #9ca3af;
+  }
+  /* Dark mode overrides for Tailwind utilities that hardcode colors */
+  [data-theme="dark"] body { background: var(--cream); color: var(--ink); }
+  [data-theme="dark"] .bg-white { background-color: var(--surface) !important; color: var(--ink); }
+  [data-theme="dark"] .bg-cream { background-color: var(--surface-2) !important; }
+  [data-theme="dark"] .bg-gray-50 { background-color: var(--surface-2) !important; }
+  [data-theme="dark"] .bg-gray-100 { background-color: #1f2a40 !important; }
+  [data-theme="dark"] .text-gray-500, [data-theme="dark"] .text-gray-600 { color: var(--muted) !important; }
+  [data-theme="dark"] .text-gray-700, [data-theme="dark"] .text-gray-800, [data-theme="dark"] .text-gray-900 { color: var(--ink) !important; }
+  [data-theme="dark"] .border, [data-theme="dark"] .border-b, [data-theme="dark"] .border-t,
+  [data-theme="dark"] .border-l, [data-theme="dark"] .border-r,
+  [data-theme="dark"] .border-gray-100, [data-theme="dark"] .border-gray-200 { border-color: var(--border) !important; }
+  [data-theme="dark"] input, [data-theme="dark"] textarea, [data-theme="dark"] select, [data-theme="dark"] .inp {
+    background-color: var(--surface-2) !important; color: var(--ink); border-color: var(--border) !important;
+  }
+  [data-theme="dark"] .glass { background: rgba(19, 28, 46, 0.85) !important; }
+  [data-theme="dark"] .shadow-card, [data-theme="dark"] .shadow-soft { box-shadow: 0 4px 20px -4px rgba(0,0,0,0.5); }
   html, body { font-family: 'Inter', sans-serif; background: var(--cream); color: var(--ink); }
   .font-urdu { font-family: 'Noto Nastaliq Urdu', serif; line-height: 2; }
   .font-display { font-family: 'Playfair Display', serif; }
@@ -490,9 +518,20 @@ function playChime(){
   } catch(e) {}
 }
 
+/* ---------------- Theme (light / dark) ---------------- */
+function useDarkMode(){
+  const [dark, setDark] = useState(()=> localStorage.getItem("rishta_theme") === "dark");
+  useEffect(()=>{
+    document.documentElement.setAttribute("data-theme", dark ? "dark" : "light");
+    localStorage.setItem("rishta_theme", dark ? "dark" : "light");
+  }, [dark]);
+  return [dark, setDark];
+}
+
 /* ---------------- Top Bar ---------------- */
 function TopBar({user, onNav, lang, setLang, view, unreadMsgs, unreadNotifs}){
   const { t } = useI18n();
+  const [dark, setDark] = useDarkMode();
   return (
     <div className="sticky top-0 z-30 glass border-b border-gray-200">
       <div className="max-w-6xl mx-auto px-4 h-14 flex items-center justify-between">
@@ -520,6 +559,10 @@ function TopBar({user, onNav, lang, setLang, view, unreadMsgs, unreadNotifs}){
               </button>
             </>
           )}
+          <button onClick={()=>setDark(!dark)} title={dark?"Light mode":"Dark mode"}
+            className="w-10 h-10 rounded-lg hover:bg-gray-100 flex items-center justify-center text-lg">
+            {dark ? "☀️" : "🌙"}
+          </button>
           <button onClick={()=>setLang(lang==="en"?"ur":"en")}
             className="px-3 py-1.5 rounded-lg border text-xs font-semibold hover:bg-gray-50">
             {lang==="en"? "اردو" : "English"}
@@ -2126,6 +2169,13 @@ function CompatRing({score}){
 
 /* ---------------- Chat (real conversations only) ---------------- */
 function ChatView({user, users, messages, sendMessage, onNav, chatTarget, clearChatTarget, fetchMessages, conversations}){
+  // Lock body scroll while inside chat view — only messages area should scroll
+  useEffect(()=>{
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return ()=>{ document.body.style.overflow = prev; };
+  }, []);
+
   // Fetch real users from backend if `users` is stale/empty + merge conversation partners
   const [allUsers, setAllUsers] = useState(Array.isArray(users) ? users : []);
   useEffect(()=>{
@@ -2218,6 +2268,27 @@ function ChatView({user, users, messages, sendMessage, onNav, chatTarget, clearC
   const scrollRef = useRef(null);
   useEffect(()=>{ scrollRef.current?.scrollTo(0,99999); },[thread.length, activeId]);
 
+  // Typing indicator
+  const [peerTyping, setPeerTyping] = useState(false);
+  const lastTypingSent = useRef(0);
+  useEffect(()=>{
+    if (!activeId) return;
+    const t = setInterval(async ()=>{
+      const r = await api("/api/typing/from/"+activeId).catch(()=>null);
+      setPeerTyping(!!r?.typing);
+    }, 2000);
+    return ()=> clearInterval(t);
+  }, [activeId]);
+  const notifyTyping = ()=>{
+    const now = Date.now();
+    if (now - lastTypingSent.current < 3000) return;
+    lastTypingSent.current = now;
+    api("/api/typing/"+activeId, { method:"POST", body:{} }).catch(()=>{});
+  };
+
+  // Image upload local state for preview + sending feedback
+  const [imageUploadState, setImageUploadState] = useState(null); // { preview, status: 'sending'|'failed' }
+
   // Voice recording state
   const [recording, setRecording] = useState(false);
   const recorderRef = useRef(null);
@@ -2252,18 +2323,36 @@ function ChatView({user, users, messages, sendMessage, onNav, chatTarget, clearC
     setRecording(false);
   };
 
-  // Attachment (image/file) upload
+  // Attachment (image/file) upload with preview + sending state
   const onAttachFile = (e)=>{
     const file = e.target.files?.[0];
     if (!file) return;
     if (file.size > 5*1024*1024) { alert("Max 5 MB"); return; }
     const reader = new FileReader();
-    reader.onload = ()=>{
-      const prefix = file.type.startsWith("image/") ? "🖼️ Image" : "📎 File: "+file.name;
-      sendMessage(activeId, prefix+"\n"+reader.result);
+    reader.onload = async ()=>{
+      const isImg = file.type.startsWith("image/");
+      // Show preview state immediately
+      setImageUploadState({ preview: reader.result, status: "sending", isImage: isImg, name: file.name });
+      const prefix = isImg ? "🖼️ Image" : "📎 File: "+file.name;
+      try {
+        await sendMessage(activeId, prefix+"\n"+reader.result);
+        setImageUploadState(null);
+      } catch (err) {
+        setImageUploadState({ preview: reader.result, status: "failed", isImage: isImg, name: file.name, body: prefix+"\n"+reader.result });
+      }
     };
     reader.readAsDataURL(file);
     e.target.value = "";
+  };
+  const retryImage = async ()=>{
+    if (!imageUploadState?.body) return;
+    setImageUploadState(s => ({ ...s, status: "sending" }));
+    try {
+      await sendMessage(activeId, imageUploadState.body);
+      setImageUploadState(null);
+    } catch (e) {
+      setImageUploadState(s => ({ ...s, status: "failed" }));
+    }
   };
 
   // EMPTY STATE — no real conversations yet (and no chat target either)
@@ -2361,11 +2450,15 @@ function ChatView({user, users, messages, sendMessage, onNav, chatTarget, clearC
               <div className="p-3 border-b flex items-center gap-3 bg-white shrink-0">
                 {/* Back to list on mobile */}
                 <button onClick={()=>setMobilePanel("list")} className="md:hidden text-emerald-700 -ml-1 px-1 text-xl" title="Back">←</button>
-                <Avatar kind={active.gender==="Female"?"female":"male"} blur={active.blurPhoto} size={40} photo={active.photos?.[0]}/>
-                <div>
-                  <div className="font-semibold">{active.name}</div>
-                  <div className="text-xs text-emerald-700">● Encrypted • last seen {active.lastActive||"recently"}</div>
-                </div>
+                <button onClick={()=>{ if(onNav && active) onNav("openProfile:"+(active._id||active.id)); }} className="cursor-pointer" title="View profile">
+                  <Avatar kind={avatarKind(active)} blur={active.blurPhoto} size={40} photo={active.photos?.[0]}/>
+                </button>
+                <button onClick={()=>{ if(onNav && active) onNav("openProfile:"+(active._id||active.id)); }} className="text-left cursor-pointer flex-1 min-w-0">
+                  <div className="font-semibold truncate">{active.name}</div>
+                  <div className="text-xs text-emerald-700 truncate">
+                    {peerTyping ? "✏️ typing…" : "● Encrypted • last seen "+(active.lastActive ? new Date(active.lastActive).toLocaleString() : "recently")}
+                  </div>
+                </button>
                 <div className="ml-auto flex gap-2">
                   {/* Voice call via Jitsi (free WebRTC) */}
                   <button onClick={()=>{
@@ -2420,6 +2513,26 @@ function ChatView({user, users, messages, sendMessage, onNav, chatTarget, clearC
                   );
                 })}
               </div>
+              {/* Image upload preview */}
+              {imageUploadState && (
+                <div className="border-t p-2 bg-emerald-50 flex items-center gap-3 shrink-0">
+                  {imageUploadState.isImage ? (
+                    <img src={imageUploadState.preview} className="w-12 h-12 rounded object-cover"/>
+                  ) : <div className="text-2xl">📎</div>}
+                  <div className="flex-1 text-xs">
+                    <div className="font-semibold">{imageUploadState.name || "Image"}</div>
+                    <div className={imageUploadState.status === "failed" ? "text-red-600" : "text-emerald-700"}>
+                      {imageUploadState.status === "sending" && "⏳ Sending..."}
+                      {imageUploadState.status === "failed" && "✗ Failed to send"}
+                    </div>
+                  </div>
+                  {imageUploadState.status === "failed" && (
+                    <button onClick={retryImage} className="px-3 py-1 bg-emerald-600 text-white rounded text-xs font-bold">Retry</button>
+                  )}
+                  <button onClick={()=>setImageUploadState(null)} className="text-gray-500">✕</button>
+                </div>
+              )}
+
               <div className="p-3 border-t flex items-center gap-2 bg-white shrink-0">
                 <button onClick={recording ? stopRecording : startRecording} className={"px-2 py-2 rounded-lg border "+(recording?"bg-red-500 text-white animate-pulse":"")} title={recording?"Stop recording":"Voice note"}>
                   {recording ? "⏹" : "🎙️"}
@@ -2428,7 +2541,7 @@ function ChatView({user, users, messages, sendMessage, onNav, chatTarget, clearC
                   📎
                   <input type="file" accept="image/*,.pdf,.doc,.docx" onChange={onAttachFile} className="hidden"/>
                 </label>
-                <input value={text} onChange={e=>setText(e.target.value)} placeholder="Type a respectful message…" className="inp flex-1"
+                <input value={text} onChange={e=>{ setText(e.target.value); if (e.target.value) notifyTyping(); }} placeholder="Type a respectful message…" className="inp flex-1"
                   onKeyDown={e=>{ if(e.key==="Enter" && text.trim()){ sendMessage(activeId, text); setText(""); }}}
                 />
                 <button onClick={()=>{ if(text.trim()){ sendMessage(activeId, text); setText(""); }}} className="btn-primary px-4 py-2 rounded-lg">Send</button>
@@ -4649,14 +4762,76 @@ function AdminAnalyticsTab({analytics}){
 /* ---------------- Old Admin Panel (kept for compatibility) ---------------- */
 function AdminPanel({users, setUsers}){
   const [tab, setTab] = useState("users");
-  const pendingEdits = [
-    { id:"e1", user:"Zeeshan Ahmed", field:"Income", old:"3 Lac", neu:"5 Lac", time:"2h"},
-    { id:"e2", user:"Sana Iqbal", field:"City", old:"Lahore", neu:"Faisalabad", time:"5h"},
-  ];
-  const reports = [
-    { id:"r1", user:"Unknown123", reason:"Fake profile / wrong photos", time:"1d", status:"Pending"},
-    { id:"r2", user:"Spammer42", reason:"Sending inappropriate messages", time:"3d", status:"Investigating"},
-  ];
+  const [paginatedUsers, setPaginatedUsers] = useState({ items: [], total: 0, page: 1, totalPages: 1 });
+  const [adminUsersLoading, setAdminUsersLoading] = useState(false);
+  const [adminUserQuery, setAdminUserQuery] = useState("");
+  const [adminUserStatus, setAdminUserStatus] = useState("");
+  const [reports, setReports] = useState([]);
+  const [pendingEdits, setPendingEdits] = useState([]);
+
+  const loadAdminUsers = async (page = 1) => {
+    setAdminUsersLoading(true);
+    try {
+      const params = new URLSearchParams();
+      params.set("page", String(page));
+      params.set("limit", "30");
+      if (adminUserQuery) params.set("q", adminUserQuery);
+      if (adminUserStatus) params.set("status", adminUserStatus);
+      const r = await api("/api/admin/users?" + params.toString());
+      // New paginated shape returns { items, total, page, totalPages }
+      // Old shape returns just an array — coerce
+      if (Array.isArray(r)) setPaginatedUsers({ items: r, total: r.length, page: 1, totalPages: 1 });
+      else setPaginatedUsers(r || { items: [], total: 0, page: 1, totalPages: 1 });
+    } catch (e) {
+      console.warn("admin users load failed", e);
+    } finally { setAdminUsersLoading(false); }
+  };
+
+  const loadReports = async () => {
+    try { const r = await api("/api/admin/reports"); setReports(Array.isArray(r) ? r : []); } catch(e){}
+  };
+  const loadEdits = async () => {
+    try { const r = await api("/api/admin/edits"); setPendingEdits(Array.isArray(r) ? r : []); } catch(e){}
+  };
+
+  useEffect(() => {
+    if (tab === "users") loadAdminUsers(1);
+    if (tab === "reports") loadReports();
+    if (tab === "edits") loadEdits();
+  }, [tab]);
+
+  // Debounced re-fetch on query/status change
+  useEffect(() => {
+    if (tab !== "users") return;
+    const t = setTimeout(() => loadAdminUsers(1), 350);
+    return () => clearTimeout(t);
+  }, [adminUserQuery, adminUserStatus]);
+
+  const pauseUser = async (uid, isPaused) => {
+    try {
+      await api("/api/admin/users/" + uid + (isPaused ? "/unpause" : "/pause"), { method: "POST", body: {} });
+      await loadAdminUsers(paginatedUsers.page);
+    } catch (e) { alert("Failed: " + e.message); }
+  };
+  const banUser = async (uid, isBanned) => {
+    if (!confirm(isBanned ? "Unban this user?" : "Ban this user permanently?")) return;
+    try {
+      await api("/api/admin/users/" + uid + (isBanned ? "/unban" : "/ban"), { method: "POST", body: {} });
+      await loadAdminUsers(paginatedUsers.page);
+    } catch (e) { alert("Failed: " + e.message); }
+  };
+  const resolveReport = async (rid, action) => {
+    try {
+      await api("/api/admin/reports/" + rid + "/" + action, { method: "POST", body: {} });
+      await loadReports();
+    } catch (e) { alert("Failed: " + e.message); }
+  };
+  const editAction = async (eid, action) => {
+    try {
+      await api("/api/admin/edits/" + eid + "/" + action, { method: "POST", body: {} });
+      await loadEdits();
+    } catch (e) { alert("Failed: " + e.message); }
+  };
   return (
     <div className="max-w-6xl mx-auto p-5 pb-24">
       <div className="bg-white rounded-2xl shadow-card p-5">
@@ -4680,34 +4855,112 @@ function AdminPanel({users, setUsers}){
         </div>
 
         {tab==="users" && (
-          <table className="w-full mt-3 text-sm">
-            <thead><tr className="text-left text-gray-500 border-b"><th className="py-2">User</th><th>City</th><th>Trust</th><th>Verified</th><th>Action</th></tr></thead>
-            <tbody>
-              {users.map(u=>(
-                <tr key={u.id} className="border-b">
-                  <td className="py-2">{u.name}</td>
-                  <td>{u.city}</td>
-                  <td>{u.trustScore}</td>
-                  <td>{u.verifications?.cnic?"✓":"✗"}</td>
-                  <td><button className="text-red-600">Ban</button> · <button className="text-amber-600">Warn</button></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <div className="mt-3">
+            {/* Toolbar: search + status filter */}
+            <div className="flex flex-wrap gap-2 mb-3 items-center">
+              <input
+                className="inp flex-1 min-w-[200px]"
+                placeholder="🔍 Search by name / email / phone / city / profession..."
+                value={adminUserQuery}
+                onChange={e=>setAdminUserQuery(e.target.value)}
+              />
+              <select className="inp" value={adminUserStatus} onChange={e=>setAdminUserStatus(e.target.value)}>
+                <option value="">All status</option>
+                <option value="active">Active</option>
+                <option value="paused">Paused</option>
+                <option value="banned">Banned</option>
+                <option value="admin-added">Admin-Added</option>
+              </select>
+              <button onClick={()=>loadAdminUsers(paginatedUsers.page)} className="btn-primary px-4 rounded-lg">Refresh</button>
+              <div className="text-xs text-gray-500 ml-2">{paginatedUsers.total} total</div>
+            </div>
+
+            {/* Loading skeleton */}
+            {adminUsersLoading && (
+              <div className="space-y-2 animate-pulse">
+                {[1,2,3,4,5].map(i=>(
+                  <div key={i} className="h-14 bg-gray-100 rounded-lg"/>
+                ))}
+              </div>
+            )}
+
+            {!adminUsersLoading && (
+              <>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead><tr className="text-left text-gray-500 border-b">
+                      <th className="py-2">User</th><th>Phone</th><th>City</th><th>Plan</th><th>Trust</th><th>Status</th><th>Source</th><th>Actions</th>
+                    </tr></thead>
+                    <tbody>
+                      {paginatedUsers.items.map(u=>{
+                        const uid = u._id||u.id;
+                        const isPaused = u.status === "paused";
+                        return (
+                          <tr key={uid} className="border-b hover:bg-slate-50">
+                            <td className="py-2">
+                              <div className="font-semibold">{u.name}</div>
+                              <div className="text-[10px] text-gray-400">{u.gender||"-"} • {u.age||"-"}yr • {u.email||"-"}</div>
+                            </td>
+                            <td className="text-xs">{u.phone || "—"}</td>
+                            <td>{u.city||"—"}</td>
+                            <td><span className="chip bg-emerald-50 text-emerald-700">{u.plan||"Free"}</span></td>
+                            <td>{u.trustScore||0}</td>
+                            <td>
+                              {u.banned && <span className="chip bg-red-100 text-red-700">🚫 Banned</span>}
+                              {!u.banned && isPaused && <span className="chip bg-amber-100 text-amber-700">⏸ Paused</span>}
+                              {!u.banned && !isPaused && <span className="chip bg-emerald-100 text-emerald-700">✓ Active</span>}
+                            </td>
+                            <td className="text-xs">{u.addedBy === "admin" ? <span className="chip bg-amber-100 text-amber-700">🛡 Admin</span> : <span className="text-gray-400">Signup</span>}</td>
+                            <td>
+                              <div className="flex gap-1 flex-wrap">
+                                <button onClick={()=>pauseUser(uid, isPaused)} className={"text-xs px-2 py-1 rounded border "+(isPaused?"hover:bg-emerald-50 text-emerald-700":"hover:bg-amber-50 text-amber-700")} title={isPaused?"Unpause":"Pause"}>
+                                  {isPaused ? "▶ Unpause" : "⏸ Pause"}
+                                </button>
+                                <button onClick={()=>banUser(uid, u.banned)} className={"text-xs px-2 py-1 rounded border "+(u.banned?"hover:bg-emerald-50":"hover:bg-red-50 text-red-600")} title={u.banned?"Unban":"Ban"}>
+                                  {u.banned?"♻ Unban":"🚫 Ban"}
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+                {paginatedUsers.items.length===0 && (
+                  <div className="text-center text-gray-500 py-8 italic">No users match these filters.</div>
+                )}
+                {/* Pagination */}
+                {paginatedUsers.totalPages > 1 && (
+                  <div className="flex items-center justify-between mt-4">
+                    <div className="text-xs text-gray-500">Page {paginatedUsers.page} of {paginatedUsers.totalPages}</div>
+                    <div className="flex gap-2">
+                      <button disabled={paginatedUsers.page<=1} onClick={()=>loadAdminUsers(paginatedUsers.page-1)} className="px-3 py-1.5 rounded border disabled:opacity-50">← Prev</button>
+                      <button disabled={paginatedUsers.page>=paginatedUsers.totalPages} onClick={()=>loadAdminUsers(paginatedUsers.page+1)} className="px-3 py-1.5 rounded border disabled:opacity-50">Next →</button>
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
         )}
         {tab==="edits" && (
           <div className="mt-3 space-y-2">
+            {pendingEdits.length === 0 && <div className="text-center text-gray-500 py-6 italic">No pending edits</div>}
             {pendingEdits.map(e=>(
-              <div key={e.id} className="p-3 rounded-xl border flex items-center justify-between">
+              <div key={e._id} className="p-3 rounded-xl border flex items-center justify-between">
                 <div>
-                  <div className="font-semibold">{e.user}</div>
-                  <div className="text-sm text-gray-600">{e.field}: <span className="line-through text-red-500">{e.old}</span> → <span className="text-emerald-700">{e.neu}</span></div>
-                  <div className="text-xs text-gray-400">{e.time} ago</div>
+                  <div className="font-semibold">User: {String(e.userId).slice(0,12)}…</div>
+                  <div className="text-sm text-gray-600">
+                    {Object.entries(e.changes || {}).map(([k,v])=>(
+                      <div key={k}><strong>{k}:</strong> <span className="line-through text-red-500">{String(v.old || "-")}</span> → <span className="text-emerald-700">{String(v.new || "-")}</span></div>
+                    ))}
+                  </div>
+                  <div className="text-xs text-gray-400">{new Date(e.createdAt).toLocaleString()}</div>
                 </div>
-                <div className="flex gap-2">
-                  <button className="btn-primary px-3 py-1.5 rounded-lg text-sm">Approve</button>
-                  <button className="px-3 py-1.5 rounded-lg border text-sm">Reject</button>
-                  <button className="px-3 py-1.5 rounded-lg border text-sm">Ask Proof</button>
+                <div className="flex gap-2 shrink-0">
+                  <button onClick={()=>editAction(e._id, "approve")} className="btn-primary px-3 py-1.5 rounded-lg text-sm">Approve</button>
+                  <button onClick={()=>editAction(e._id, "reject")} className="px-3 py-1.5 rounded-lg border text-sm">Reject</button>
                 </div>
               </div>
             ))}
@@ -4715,18 +4968,35 @@ function AdminPanel({users, setUsers}){
         )}
         {tab==="reports" && (
           <div className="mt-3 space-y-2">
+            {reports.length === 0 && (
+              <div className="bg-white rounded-2xl p-8 text-center text-gray-500">
+                <div className="text-5xl">🛡️</div>
+                <div className="mt-3 font-semibold">No reports yet</div>
+                <div className="text-xs">When users report each other, the reports appear here.</div>
+              </div>
+            )}
             {reports.map(r=>(
-              <div key={r.id} className="p-3 rounded-xl border flex items-center justify-between">
-                <div>
-                  <div className="font-semibold">{r.user}</div>
-                  <div className="text-sm text-gray-600">{r.reason}</div>
-                  <div className="text-xs text-gray-400">{r.time} ago • {r.status}</div>
+              <div key={r._id} className="p-3 rounded-xl border bg-white">
+                <div className="flex items-center justify-between mb-2">
+                  <div>
+                    <div className="font-semibold">{r.reportedUser?.name || r.reported || "Unknown user"}</div>
+                    <div className="text-xs text-gray-500">
+                      Reported by {r.reporterUser?.name || r.reporter || "Anonymous"}
+                      • {new Date(r.createdAt || r.time || Date.now()).toLocaleString()}
+                    </div>
+                  </div>
+                  <span className={"chip "+(r.status === "ban" ? "bg-red-100 text-red-700" : r.status === "suspend" ? "bg-amber-100 text-amber-700" : r.status === "dismiss" ? "bg-gray-100 text-gray-600" : "bg-yellow-100 text-yellow-700")}>
+                    {r.status || "Pending"}
+                  </span>
                 </div>
-                <div className="flex gap-2">
-                  <button className="px-3 py-1.5 rounded-lg border text-sm">Warn</button>
-                  <button className="px-3 py-1.5 rounded-lg border text-sm text-amber-700">Restrict</button>
-                  <button className="px-3 py-1.5 rounded-lg border text-sm text-red-700">Ban</button>
-                </div>
+                <div className="text-sm bg-gray-50 rounded p-2 my-2">{r.reason || r.message || "No reason provided"}</div>
+                {!["dismiss","ban","suspend"].includes(r.status) && (
+                  <div className="flex gap-2 mt-2">
+                    <button onClick={()=>resolveReport(r._id, "dismiss")} className="px-3 py-1.5 rounded border text-sm">Dismiss</button>
+                    <button onClick={()=>resolveReport(r._id, "suspend")} className="px-3 py-1.5 rounded border text-sm text-amber-700">⏸ Pause user</button>
+                    <button onClick={()=>resolveReport(r._id, "ban")} className="px-3 py-1.5 rounded border text-sm text-red-700">🚫 Ban user</button>
+                  </div>
+                )}
               </div>
             ))}
           </div>
@@ -5525,7 +5795,24 @@ function App(){
           <Matches user={user} users={users} onOpen={(u)=>setActiveProfile(u)}/>
         )}
         {view==="chat" && user && (
-          <ChatView user={user} users={users} messages={messages} sendMessage={sendMessage} onNav={setView} chatTarget={chatTargetUser} clearChatTarget={()=>setChatTargetUser(null)} fetchMessages={fetchMessages} conversations={conversations}/>
+          <ChatView user={user} users={users} messages={messages} sendMessage={sendMessage}
+            onNav={async (v)=>{
+              // Special "openProfile:<id>" — fetch and open profile detail
+              if (typeof v === "string" && v.startsWith("openProfile:")) {
+                const id = v.slice("openProfile:".length);
+                let u = users.find(x => (x._id||x.id) === id);
+                if (!u) {
+                  try { u = await api("/api/admin/users/"+id); } catch (e) {
+                    // Fallback to public users list
+                    try { const list = await api("/api/users"); u = list?.find(x => (x._id||x.id) === id); } catch(_) {}
+                  }
+                }
+                if (u) setActiveProfile(u);
+                return;
+              }
+              setView(v);
+            }}
+            chatTarget={chatTargetUser} clearChatTarget={()=>setChatTargetUser(null)} fetchMessages={fetchMessages} conversations={conversations}/>
         )}
         {view==="profile" && user && (
           <MyProfile user={user} setUser={setUser} onLogout={onLogout} onEdit={()=>setView("setup")} onNav={setView}/>
