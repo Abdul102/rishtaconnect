@@ -317,7 +317,7 @@ app.post("/api/auth/signup", async (req, res) => {
     const hash = await bcrypt.hash(password, 10);
     const user = {
       _id: uuid(), name, email, phone, password: hash, gender,
-      role: "user", plan: "Free", trustScore: 60, photos: [], blurPhoto: true,
+      role: "user", plan: "Free", trustScore: 60, photos: [], blurPhoto: false,
       verifications: { phone: false, email: false, cnic: false, face: false, family: false, business: false },
       preferences: {}, languages: ["Urdu", "English"], religion: "Islam", sect: "Sunni",
       createdAt: new Date(), lastActive: new Date()
@@ -342,7 +342,8 @@ app.post("/api/auth/login", async (req, res) => {
     if (!user) return res.status(400).json({ error: "Invalid credentials" });
     const ok = await bcrypt.compare(password, user.password || "");
     if (!ok) return res.status(400).json({ error: "Invalid credentials" });
-    if (user.banned) return res.status(403).json({ error: "Account banned" });
+    if (user.banned) return res.status(403).json({ error: "Your account has been banned. Please contact support." });
+    if (user.status === "paused") return res.status(403).json({ error: "Your account is paused by admin. Please contact support." });
     await db.update("users", { _id: user._id || user.id }, { lastActive: new Date() });
     const token = jwt.sign({ id: user._id || user.id, role: user.role }, JWT_SECRET, { expiresIn: "7d" });
     res.json({
@@ -793,7 +794,7 @@ app.get("/api/users", auth, async (req, res) => {
   const blockedMe = new Set(blocks.filter(b => b.blocked === (me._id || me.id)).map(b => b.blocker));
 
   // Admin sees all users (including admins/banned)
-  // Regular users see EVERYONE except: self, banned, admin role, blocked
+  // Regular users see EVERYONE except: self, banned, paused, admin role, blocked
   let list;
   if (me.role === "admin") {
     list = allUsers.filter(u => (u._id || u.id) !== (me._id || me.id));
@@ -801,7 +802,7 @@ app.get("/api/users", auth, async (req, res) => {
     list = allUsers.filter(u => {
       const uid = u._id || u.id;
       if (uid === (me._id || me.id)) return false;
-      if (u.banned || u.role === "admin") return false;
+      if (u.banned || u.status === "paused" || u.role === "admin") return false;
       if (blockedByMe.has(uid) || blockedMe.has(uid)) return false;
       if (u.invisibleMode && u.plan !== "Free") return false; // hidden in browse
       return true;
@@ -868,8 +869,7 @@ app.get("/api/users", auth, async (req, res) => {
     return (b.score || 0) - (a.score || 0);
   });
 
-  // Free plan limit only for regular users
-  if (me.role !== "admin" && me.plan === "Free") list = list.slice(0, 20);
+  // Show all users by default. Free plan still sees everyone — they're just gated on chat/super-like.
   res.json(list);
 });
 
@@ -964,6 +964,21 @@ app.post("/api/interests/:id/:action", auth, async (req, res) => {
     actorId: req.user.id, time: new Date()
   });
   res.json({ ok: true, status: newStatus });
+});
+
+// All connected (mutually-accepted) users for current user
+app.get("/api/connections", auth, async (req, res) => {
+  const me = req.user.id;
+  const interests = await db.find("interests", {});
+  const accepted = interests.filter(i => i.status === "accepted" && (i.from === me || i.to === me));
+  const partnerIds = [...new Set(accepted.map(i => (i.from === me ? i.to : i.from)))];
+  const users = await Promise.all(partnerIds.map(id => db.findOne("users", { _id: id })));
+  const list = users.filter(Boolean).map(u => {
+    const interest = accepted.find(i => i.from === (u._id || u.id) || i.to === (u._id || u.id));
+    return { ...sanitize(u), connectedAt: interest?.respondedAt || interest?.createdAt, connectionId: interest?._id };
+  });
+  list.sort((a, b) => new Date(b.connectedAt || 0) - new Date(a.connectedAt || 0));
+  res.json(list);
 });
 
 // Connection status helper used in profile detail to show Connected badge
@@ -1279,6 +1294,28 @@ app.get("/api/presence/:user", auth, async (req, res) => {
   res.json({ online, lastActive });
 });
 
+/* ==================== TYPING INDICATOR (polling fallback) ==================== */
+// In-memory typing presence: { "fromId:toId": expiresAtTimestamp }
+const typingMap = new Map();
+app.post("/api/typing/:other", auth, (req, res) => {
+  const key = `${req.user.id}:${req.params.other}`;
+  typingMap.set(key, Date.now() + 4000); // 4 sec window
+  io.to(req.params.other).emit("typing", { from: req.user.id });
+  res.json({ ok: true });
+});
+app.post("/api/typing/:other/stop", auth, (req, res) => {
+  typingMap.delete(`${req.user.id}:${req.params.other}`);
+  io.to(req.params.other).emit("typing_stop", { from: req.user.id });
+  res.json({ ok: true });
+});
+app.get("/api/typing/from/:other", auth, (req, res) => {
+  const key = `${req.params.other}:${req.user.id}`;
+  const expiresAt = typingMap.get(key);
+  const typing = expiresAt && expiresAt > Date.now();
+  if (!typing) typingMap.delete(key);
+  res.json({ typing: !!typing });
+});
+
 /* ==================== MESSAGE READ RECEIPTS / TYPING ==================== */
 app.post("/api/messages/:other/read", auth, async (req, res) => {
   const key = [req.user.id, req.params.other].sort().join("-");
@@ -1583,29 +1620,112 @@ app.post("/api/admin/edits/:id/:action", auth, adminOnly, async (req, res) => {
   res.json({ ok: true });
 });
 
+// Paginated + searchable admin user list — designed for fast load
 app.get("/api/admin/users", auth, adminOnly, async (req, res) => {
-  const list = await db.find("users", {});
-  res.json(list.map(sanitize));
+  const page = Math.max(1, +(req.query.page || 1));
+  const limit = Math.min(100, +(req.query.limit || 30));
+  const q = String(req.query.q || "").toLowerCase().trim();
+  const statusFilter = req.query.status; // active | paused | banned | admin-added
+
+  let list = await db.find("users", {});
+
+  // Status filter
+  if (statusFilter === "active") list = list.filter(u => !u.banned && u.status !== "paused");
+  else if (statusFilter === "paused") list = list.filter(u => u.status === "paused" && !u.banned);
+  else if (statusFilter === "banned") list = list.filter(u => u.banned);
+  else if (statusFilter === "admin-added") list = list.filter(u => u.addedBy === "admin");
+
+  // Search filter (across name, email, phone, city, profession)
+  if (q) {
+    list = list.filter(u =>
+      ((u.name || "") + " " + (u.email || "") + " " + (u.phone || "") + " " + (u.city || "") + " " + (u.profession || ""))
+        .toLowerCase().includes(q)
+    );
+  }
+
+  // Sort by newest first
+  list.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+
+  const total = list.length;
+  const totalPages = Math.max(1, Math.ceil(total / limit));
+  const slice = list.slice((page - 1) * limit, page * limit);
+  // Only return necessary fields for table view (huge speed win when DB has thousands)
+  const items = slice.map(u => {
+    const s = sanitize(u);
+    return {
+      _id: s._id || s.id, name: s.name, email: s.email, phone: s.phone, gender: s.gender,
+      age: s.age, city: s.city, profession: s.profession, plan: s.plan,
+      role: s.role, banned: !!s.banned, status: s.status || "active",
+      addedBy: s.addedBy, trustScore: s.trustScore, photos: s.photos?.slice(0, 1),
+      verifications: s.verifications, createdAt: s.createdAt, lastActive: s.lastActive,
+      caste: s.caste
+    };
+  });
+
+  res.json({ items, total, page, totalPages, limit });
 });
+
+// Reports with hydrated reporter + target user info
 app.get("/api/admin/reports", auth, adminOnly, async (req, res) => {
-  res.json(await db.find("reports", {}));
+  const reports = (await db.find("reports", {})).sort((a, b) =>
+    new Date(b.createdAt || b.time || 0) - new Date(a.createdAt || a.time || 0)
+  );
+  const userIds = [...new Set(reports.flatMap(r => [r.reporter, r.reported, r.userId, r.targetId]).filter(Boolean))];
+  const users = await Promise.all(userIds.map(id => db.findOne("users", { _id: id })));
+  const userMap = Object.fromEntries(users.filter(Boolean).map(u => [u._id || u.id, sanitize(u)]));
+  const hydrated = reports.map(r => ({
+    ...r,
+    reporterUser: userMap[r.reporter] || userMap[r.userId] || null,
+    reportedUser: userMap[r.reported] || userMap[r.targetId] || null,
+  }));
+  res.json(hydrated);
 });
-app.post("/api/admin/users/:id/ban", auth, adminOnly, async (req, res) => {
-  await db.update("users", { _id: req.params.id }, { banned: true });
-  res.json({ ok: true });
-});
-app.post("/api/admin/users/:id/unban", auth, adminOnly, async (req, res) => {
-  await db.update("users", { _id: req.params.id }, { banned: false });
+
+// Resolve report (dismiss / take action)
+app.post("/api/admin/reports/:id/:action", auth, adminOnly, async (req, res) => {
+  const { id, action } = req.params;
+  const r = await db.findOne("reports", { _id: id });
+  if (!r) return res.status(404).json({ error: "Report not found" });
+  await db.update("reports", { _id: id }, { status: action, resolvedAt: new Date(), resolvedBy: req.user.id });
+  // Optionally take user action
+  const targetId = r.reported || r.targetId || r.userId;
+  if (targetId) {
+    if (action === "suspend") await db.update("users", { _id: targetId }, { status: "paused", pausedAt: new Date(), pausedReason: "report:" + id });
+    if (action === "ban") await db.update("users", { _id: targetId }, { banned: true });
+  }
   res.json({ ok: true });
 });
 
-// Deactivate / Activate (different from ban — user just paused)
+// Pause user (status = "paused" — cannot login but not banned)
+app.post("/api/admin/users/:id/pause", auth, adminOnly, async (req, res) => {
+  await db.update("users", { _id: req.params.id }, {
+    status: "paused", pausedAt: new Date(), pausedBy: req.user.id,
+    pausedReason: req.body?.reason || null
+  });
+  res.json({ ok: true, status: "paused" });
+});
+app.post("/api/admin/users/:id/unpause", auth, adminOnly, async (req, res) => {
+  await db.update("users", { _id: req.params.id }, { status: "active", pausedAt: null });
+  res.json({ ok: true, status: "active" });
+});
+
+// Ban / Unban (hard block + show as banned)
+app.post("/api/admin/users/:id/ban", auth, adminOnly, async (req, res) => {
+  await db.update("users", { _id: req.params.id }, { banned: true, bannedAt: new Date(), bannedReason: req.body?.reason || null });
+  res.json({ ok: true });
+});
+app.post("/api/admin/users/:id/unban", auth, adminOnly, async (req, res) => {
+  await db.update("users", { _id: req.params.id }, { banned: false, bannedAt: null });
+  res.json({ ok: true });
+});
+
+// Legacy aliases (deactivate/activate map to pause/unpause)
 app.post("/api/admin/users/:id/deactivate", auth, adminOnly, async (req, res) => {
-  await db.update("users", { _id: req.params.id }, { active: false });
+  await db.update("users", { _id: req.params.id }, { status: "paused", pausedAt: new Date() });
   res.json({ ok: true });
 });
 app.post("/api/admin/users/:id/activate", auth, adminOnly, async (req, res) => {
-  await db.update("users", { _id: req.params.id }, { active: true });
+  await db.update("users", { _id: req.params.id }, { status: "active", pausedAt: null });
   res.json({ ok: true });
 });
 
@@ -1678,8 +1798,21 @@ io.use((socket, next) => {
   catch (e) { next(); }
 });
 io.on("connection", (socket) => {
-  if (socket.user?.id) socket.join(socket.user.id);
-  socket.on("typing", ({ to }) => to && io.to(to).emit("typing", { from: socket.user?.id }));
+  const uid = socket.user?.id;
+  if (uid) {
+    socket.join(uid);
+    // Broadcast online status to anyone who cares
+    io.emit("user_online", { userId: uid });
+    db.update("users", { _id: uid }, { lastActive: new Date() }).catch(() => {});
+  }
+  socket.on("typing", ({ to }) => to && uid && io.to(to).emit("typing", { from: uid }));
+  socket.on("typing_stop", ({ to }) => to && uid && io.to(to).emit("typing_stop", { from: uid }));
+  socket.on("disconnect", () => {
+    if (uid) {
+      io.emit("user_offline", { userId: uid });
+      db.update("users", { _id: uid }, { lastActive: new Date() }).catch(() => {});
+    }
+  });
 });
 
 /* ==================== ADMIN BOOTSTRAP (Emergency Reset) ==================== */
@@ -1860,9 +1993,35 @@ async function autoSeedIfEmpty() {
   }
 }
 
+/* ---- Auto-import seed users on startup (idempotent) ---- */
+async function autoImportSeedUsersIfNeeded() {
+  try {
+    const seedPath = path.join(__dirname, "seed-users.json");
+    if (!fs.existsSync(seedPath)) {
+      console.log("ℹ  No seed-users.json found — skipping auto-import.");
+      return;
+    }
+    // Skip if SKIP_AUTO_IMPORT=1 (manual control)
+    if (process.env.SKIP_AUTO_IMPORT === "1") {
+      console.log("ℹ  SKIP_AUTO_IMPORT=1 — auto-import disabled.");
+      return;
+    }
+    const data = JSON.parse(fs.readFileSync(seedPath, "utf-8"));
+    const result = await runImport(data, null);
+    if (result.created > 0) {
+      console.log(`✓ Auto-imported ${result.created} seed users on startup (${result.skipped} already existed). Default password: ${result.defaultPassword}`);
+    } else {
+      console.log(`ℹ  All ${result.skipped} seed users already exist — no new imports.`);
+    }
+  } catch (e) {
+    console.error("✗ Auto-import failed:", e.message);
+  }
+}
+
 /* ==================== START ==================== */
 (async () => {
   await connectMongo();
   await autoSeedIfEmpty();
+  await autoImportSeedUsersIfNeeded();
   server.listen(PORT, () => console.log(`✓ RishtaConnect API running on http://localhost:${PORT}`));
 })();
