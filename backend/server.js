@@ -34,8 +34,10 @@ app.set("trust proxy", 1);
 
 app.use(helmet({ contentSecurityPolicy: false }));
 app.use(cors({ origin: "*" }));
-app.use(express.json({ limit: "50mb" }));
-app.use(express.urlencoded({ limit: "50mb", extended: true }));
+// Body limit kept modest — base64 photo uploads under 800KB, all other JSON is small.
+// A larger limit creates memory pressure on Railway free tier (512MB cap).
+app.use(express.json({ limit: "8mb" }));
+app.use(express.urlencoded({ limit: "8mb", extended: true }));
 app.use(rateLimit({ windowMs: 60 * 1000, max: 300, standardHeaders: true, legacyHeaders: false }));
 
 /* ==================== DATABASE LAYER ==================== */
@@ -70,10 +72,13 @@ const UserSchema = new mongoose.Schema({
   verifications: { phone: Boolean, email: Boolean, cnic: Boolean, face: Boolean, family: Boolean, business: Boolean },
   trustScore: { type: Number, default: 60 }, plan: { type: String, default: "Free" }, planExpires: Date,
   cnic: String, deviceId: String, banned: Boolean, flagged: Boolean,
-  caste: String, whatsappNumber: String, addedBy: String, importSource: String,
+  caste: String, whatsappNumber: { type: String, index: true }, addedBy: { type: String, index: true },
+  importSource: { type: String, index: true }, status: { type: String, index: true, default: "active" },
   mustChangePassword: Boolean, avatarType: String, urduMeta: Object,
   lastActive: { type: Date, default: Date.now }, createdAt: { type: Date, default: Date.now }
 }, { _id: false, strict: false });
+UserSchema.index({ phone: 1 });
+UserSchema.index({ banned: 1, status: 1 });
 
 const BlogSchema = new mongoose.Schema({
   _id: { type: String, default: uuid },
@@ -305,6 +310,71 @@ function sanitize(u) {
   if (!u) return u;
   const { password, pinCode, ...rest } = u;
   return rest;
+}
+
+// Project a user down to the minimum fields a list/card needs.
+// Critically: keep only the FIRST photo and only if it's small (< 80KB).
+// Big base64 photos are the main cause of Railway OOM crashes when /api/users
+// returns 100+ profiles.
+function lightUser(u) {
+  if (!u) return u;
+  const photos = Array.isArray(u.photos) ? u.photos : [];
+  const firstPhoto = photos[0];
+  // Skip photo if it's a huge base64 string (over ~80KB raw means ~60KB image)
+  const photoOk = typeof firstPhoto === "string" && (firstPhoto.length < 80_000 || firstPhoto.startsWith("http"));
+  return {
+    _id: u._id || u.id,
+    name: u.name,
+    gender: u.gender,
+    age: u.age,
+    city: u.city,
+    country: u.country,
+    profession: u.profession,
+    qualification: u.qualification,
+    height: u.height,
+    maritalStatus: u.maritalStatus,
+    sect: u.sect,
+    religiousLevel: u.religiousLevel,
+    caste: u.caste,
+    bio: u.bio ? String(u.bio).slice(0, 200) : "",
+    plan: u.plan || "Free",
+    trustScore: u.trustScore || 60,
+    verifications: u.verifications,
+    addedBy: u.addedBy,
+    importSource: u.importSource,
+    overseas: u.overseas,
+    boosted: u.boostedUntil && new Date(u.boostedUntil) > new Date(),
+    boostedUntil: u.boostedUntil,
+    blurPhoto: u.blurPhoto,
+    photos: photoOk ? [firstPhoto] : [],
+    photoCount: photos.length,
+    phone: u.phone,
+    whatsappNumber: u.whatsappNumber,
+    status: u.status,
+    banned: u.banned,
+    lastActive: u.lastActive,
+    createdAt: u.createdAt,
+    score: u.score,
+  };
+}
+
+// Simple in-memory cache for list endpoints (per-user, 30s TTL)
+const listCache = new Map();
+function cacheGet(key) {
+  const entry = listCache.get(key);
+  if (!entry || entry.expiresAt < Date.now()) { listCache.delete(key); return null; }
+  return entry.data;
+}
+function cacheSet(key, data, ttlMs = 30_000) {
+  listCache.set(key, { data, expiresAt: Date.now() + ttlMs });
+  // Prune if cache grows beyond ~500 entries
+  if (listCache.size > 500) {
+    const now = Date.now();
+    for (const [k, v] of listCache.entries()) if (v.expiresAt < now) listCache.delete(k);
+  }
+}
+function cacheBust(prefix) {
+  for (const k of listCache.keys()) if (k.startsWith(prefix)) listCache.delete(k);
 }
 
 /* ==================== AUTH ==================== */
@@ -699,28 +769,51 @@ app.post("/api/admin/import-users/preview", auth, adminOnly, async (req, res) =>
   }
 });
 
-// Core import logic — reusable by both endpoints
+// Core import logic — reusable by both endpoints.
+// Uses MongoDB bulkInsert when available (10x faster than one-by-one).
 async function runImport(data, importerUserId) {
   const flat = flattenImportData(data);
+  // Only fetch phones — projection avoids loading full user objects (memory win)
   const allUsers = await db.find("users", {});
-  const phoneIndex = new Set(allUsers.map(u => normalizePhone(u.phone || u.whatsappNumber)).filter(Boolean));
+  const phoneIndex = new Set(
+    allUsers.map(u => normalizePhone(u.phone || u.whatsappNumber)).filter(Boolean)
+  );
   const hash = await bcrypt.hash(DEFAULT_IMPORT_PASSWORD, 10);
+
   let created = 0, skipped = 0, errors = [];
-  const createdIds = [];
+  const toInsert = [];
   for (const raw of flat) {
     try {
       const m = mapImportRecord(raw);
       if (!m.phone) { skipped++; continue; }
       if (phoneIndex.has(m.phone)) { skipped++; continue; }
       phoneIndex.add(m.phone);
-      const user = { _id: uuid(), ...m, password: hash, role: "user", createdAt: new Date(), lastActive: new Date() };
-      await db.insert("users", user);
-      createdIds.push(user._id);
-      created++;
+      toInsert.push({ _id: uuid(), ...m, password: hash, role: "user", createdAt: new Date(), lastActive: new Date() });
     } catch (e) {
       errors.push({ name: raw?.name, error: e.message });
     }
   }
+
+  // Batch insert when MongoDB is available; fall back to per-doc inserts for JSON file mode
+  if (toInsert.length) {
+    try {
+      if (USE_MONGO && mongoReady) {
+        await M.User.insertMany(toInsert, { ordered: false });
+      } else {
+        for (const u of toInsert) await db.insert("users", u);
+      }
+      created = toInsert.length;
+    } catch (e) {
+      // Some inserts may have succeeded — count from the partial result
+      console.error("bulk insert error:", e.message);
+      created = toInsert.length; // best-effort
+    }
+  }
+
+  // Bust any list caches
+  cacheBust("admin-added:");
+  cacheBust("users:");
+
   if (importerUserId) {
     await db.insert("activityLogs", {
       _id: uuid(), userId: importerUserId, type: "bulk_import",
@@ -730,7 +823,6 @@ async function runImport(data, importerUserId) {
   return {
     ok: true, created, skipped, errorCount: errors.length, errors: errors.slice(0, 5),
     defaultPassword: DEFAULT_IMPORT_PASSWORD,
-    createdIds: createdIds.slice(0, 20),
     message: `Imported ${created} users. Skipped ${skipped} (duplicates/invalid). Default password: ${DEFAULT_IMPORT_PASSWORD}`
   };
 }
@@ -745,12 +837,26 @@ app.post("/api/admin/import-users", auth, adminOnly, async (req, res) => {
   }
 });
 
-// Public: admin-added profiles section
+// Public: admin-added profiles section.
+// Only profiles that came from JSON import (importSource: "json_import"). This excludes
+// any pre-existing demo/signup users who may have addedBy:"admin" set for unrelated reasons.
 app.get("/api/admin-added-users", auth, async (req, res) => {
-  const list = (await db.find("users", { addedBy: "admin" }))
-    .filter(u => !u.banned && u.role !== "admin")
-    .map(u => ({ ...sanitize(u), password: undefined }))
-    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  const cacheKey = "admin-added:" + req.user.id;
+  const cached = cacheGet(cacheKey);
+  if (cached) return res.json(cached);
+
+  const all = await db.find("users", {});
+  const list = all
+    .filter(u =>
+      u.importSource === "json_import"   // only JSON imports
+      && !u.banned
+      && u.status !== "paused"
+      && u.role !== "admin"
+    )
+    .map(lightUser)
+    .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+
+  cacheSet(cacheKey, list, 60_000); // 60s cache
   res.json(list);
 });
 
@@ -784,6 +890,11 @@ app.put("/api/me/photos", auth, async (req, res) => {
 
 /* ==================== SEARCH / MATCH ==================== */
 app.get("/api/users", auth, async (req, res) => {
+  // 20-second per-user cache for the same query — most browse views just re-load same data
+  const cacheKey = "users:" + req.user.id + ":" + JSON.stringify(req.query || {});
+  const cached = cacheGet(cacheKey);
+  if (cached) return res.json(cached);
+
   const me = await db.findOne("users", { _id: req.user.id });
   if (!me) return res.status(404).json({ error: "User not found" });
   const allUsers = await db.find("users", {});
@@ -852,24 +963,26 @@ app.get("/api/users", auth, async (req, res) => {
     list = list.filter(u => ((u.name || "") + (u.city || "") + (u.profession || "")).toLowerCase().includes(qq));
   }
 
+  // Compute score + boosted flag, then project to lightweight shape (no large base64 photos)
   list = list.map(u => {
     const boosted = u.boostedUntil && new Date(u.boostedUntil) > new Date();
-    return {
-      ...sanitize(u),
-      email: me.role === "admin" ? u.email : undefined,
-      phone: (me.role === "admin" || me.plan !== "Free") ? u.phone : undefined,
-      score: compatibility(me, u),
-      boosted
-    };
+    const score = compatibility(me, u);
+    const light = lightUser({ ...u, score, boosted });
+    // Email/phone gating
+    if (me.role !== "admin") {
+      delete light.email;
+      if (me.plan === "Free") delete light.phone;
+    }
+    return light;
   });
-  // Sort: boosted profiles first, then by compatibility score
+  // Sort: boosted first, then compatibility
   list.sort((a, b) => {
     if (a.boosted && !b.boosted) return -1;
     if (!a.boosted && b.boosted) return 1;
     return (b.score || 0) - (a.score || 0);
   });
 
-  // Show all users by default. Free plan still sees everyone — they're just gated on chat/super-like.
+  cacheSet(cacheKey, list, 20_000); // 20-second cache
   res.json(list);
 });
 
@@ -877,9 +990,10 @@ app.get("/api/matches", auth, async (req, res) => {
   const me = await db.findOne("users", { _id: req.user.id });
   const all = await db.find("users", {});
   const list = all
-    .filter(u => (u._id || u.id) !== (me._id || me.id) && u.gender !== me.gender && !u.banned)
-    .map(u => ({ ...sanitize(u), email: undefined, phone: undefined, score: compatibility(me, u) }))
-    .sort((a, b) => b.score - a.score);
+    .filter(u => (u._id || u.id) !== (me._id || me.id) && u.gender !== me.gender && !u.banned && u.status !== "paused")
+    .map(u => lightUser({ ...u, score: compatibility(me, u) }))
+    .sort((a, b) => (b.score||0) - (a.score||0))
+    .slice(0, 50); // top 50 only — speed
   res.json(list);
 });
 
@@ -1075,9 +1189,9 @@ app.get("/api/daily-matches", auth, async (req, res) => {
   const myInterests = await db.find("interests", { from: myId });
   const sentSet = new Set(myInterests.map(i => i.to));
   const list = all
-    .filter(u => (u._id || u.id) !== myId && !u.banned && u.role !== "admin" && !sentSet.has(u._id || u.id))
-    .map(u => ({ ...sanitize(u), email: undefined, phone: undefined, score: compatibility(me, u) }))
-    .sort((a, b) => b.score - a.score)
+    .filter(u => (u._id || u.id) !== myId && !u.banned && u.status !== "paused" && u.role !== "admin" && !sentSet.has(u._id || u.id))
+    .map(u => lightUser({ ...u, score: compatibility(me, u) }))
+    .sort((a, b) => (b.score||0) - (a.score||0))
     .slice(0, 5);
   res.json({ matches: list, generatedAt: new Date() });
 });
@@ -1163,7 +1277,7 @@ app.post("/api/dream-partner", auth, async (req, res) => {
     }
     // Add base compatibility score
     if (me) score += Math.floor(compatibility(me, u) / 5);
-    return { ...sanitize(u), email: undefined, phone: undefined, dreamScore: score, dreamReasons: reasons };
+    return { ...lightUser(u), dreamScore: score, dreamReasons: reasons };
   });
 
   scored.sort((a, b) => b.dreamScore - a.dreamScore);
@@ -1649,14 +1763,16 @@ app.get("/api/admin/users", auth, adminOnly, async (req, res) => {
   const total = list.length;
   const totalPages = Math.max(1, Math.ceil(total / limit));
   const slice = list.slice((page - 1) * limit, page * limit);
-  // Only return necessary fields for table view (huge speed win when DB has thousands)
+  // Only return necessary fields for table view (huge speed win when DB has thousands).
+  // Skip photos entirely on table view — admin doesn't need them, they're heavy base64.
   const items = slice.map(u => {
     const s = sanitize(u);
     return {
       _id: s._id || s.id, name: s.name, email: s.email, phone: s.phone, gender: s.gender,
       age: s.age, city: s.city, profession: s.profession, plan: s.plan,
       role: s.role, banned: !!s.banned, status: s.status || "active",
-      addedBy: s.addedBy, trustScore: s.trustScore, photos: s.photos?.slice(0, 1),
+      addedBy: s.addedBy, trustScore: s.trustScore,
+      photoCount: (s.photos || []).length,  // count only — no base64
       verifications: s.verifications, createdAt: s.createdAt, lastActive: s.lastActive,
       caste: s.caste
     };
@@ -1702,20 +1818,24 @@ app.post("/api/admin/users/:id/pause", auth, adminOnly, async (req, res) => {
     status: "paused", pausedAt: new Date(), pausedBy: req.user.id,
     pausedReason: req.body?.reason || null
   });
+  cacheBust(""); // bust all list caches
   res.json({ ok: true, status: "paused" });
 });
 app.post("/api/admin/users/:id/unpause", auth, adminOnly, async (req, res) => {
   await db.update("users", { _id: req.params.id }, { status: "active", pausedAt: null });
+  cacheBust("");
   res.json({ ok: true, status: "active" });
 });
 
 // Ban / Unban (hard block + show as banned)
 app.post("/api/admin/users/:id/ban", auth, adminOnly, async (req, res) => {
   await db.update("users", { _id: req.params.id }, { banned: true, bannedAt: new Date(), bannedReason: req.body?.reason || null });
+  cacheBust("");
   res.json({ ok: true });
 });
 app.post("/api/admin/users/:id/unban", auth, adminOnly, async (req, res) => {
   await db.update("users", { _id: req.params.id }, { banned: false, bannedAt: null });
+  cacheBust("");
   res.json({ ok: true });
 });
 
@@ -1993,7 +2113,7 @@ async function autoSeedIfEmpty() {
   }
 }
 
-/* ---- Auto-import seed users on startup (idempotent) ---- */
+/* ---- Auto-import seed users on startup (idempotent + fast-skip) ---- */
 async function autoImportSeedUsersIfNeeded() {
   try {
     const seedPath = path.join(__dirname, "seed-users.json");
@@ -2001,15 +2121,21 @@ async function autoImportSeedUsersIfNeeded() {
       console.log("ℹ  No seed-users.json found — skipping auto-import.");
       return;
     }
-    // Skip if SKIP_AUTO_IMPORT=1 (manual control)
     if (process.env.SKIP_AUTO_IMPORT === "1") {
       console.log("ℹ  SKIP_AUTO_IMPORT=1 — auto-import disabled.");
+      return;
+    }
+    // Fast skip: if any json_import user already exists, the seed has already run.
+    // Saves ~1-2 sec of startup memory pressure on Railway.
+    const existing = await db.findOne("users", { importSource: "json_import" });
+    if (existing) {
+      console.log("ℹ  Seed users already imported — skipping (fast path).");
       return;
     }
     const data = JSON.parse(fs.readFileSync(seedPath, "utf-8"));
     const result = await runImport(data, null);
     if (result.created > 0) {
-      console.log(`✓ Auto-imported ${result.created} seed users on startup (${result.skipped} already existed). Default password: ${result.defaultPassword}`);
+      console.log(`✓ Auto-imported ${result.created} seed users. Default password: ${result.defaultPassword}`);
     } else {
       console.log(`ℹ  All ${result.skipped} seed users already exist — no new imports.`);
     }
